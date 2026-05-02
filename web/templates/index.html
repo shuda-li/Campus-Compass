@@ -145,6 +145,7 @@
         const sendBtn = document.getElementById("sendBtn");
         const wordCount = document.getElementById("wordCount");
         let isLoading = false;
+        let sessionId = "";
 
         msgInput.addEventListener("input", () => {
             msgInput.style.height = "auto";
@@ -156,7 +157,7 @@
             if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
         }
 
-        function sendQuick(text) { msgInput.value = text; sendMessage(); }
+        function sendQuick(text) { msgInput.value = text; sessionId = ""; sendMessage(); }
 
         function sendMessage() {
             const msg = msgInput.value.trim();
@@ -173,10 +174,14 @@
             fetch("/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: msg }),
+                body: JSON.stringify({ message: msg, session_id: sessionId }),
             })
                 .then(r => r.json())
-                .then(d => { removeLoadingMsg(); addAiMsg(d.reply); })
+                .then(d => {
+                    removeLoadingMsg();
+                    addAiMsg(d.reply);
+                    if (d.session_id) sessionId = d.session_id;
+                })
                 .catch(() => { removeLoadingMsg(); addAiMsg('<div class="bg-red-900/20 border border-red-500/20 text-red-300 px-5 py-3 rounded-2xl text-sm">网络请求失败，请确认服务已启动</div>'); })
                 .finally(() => { isLoading = false; sendBtn.disabled = false; msgInput.focus(); });
         }

@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campus Compass · 校园活动策划</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: '#121212',
+                        darkCard: '#1E1E1E',
+                        darkInput: '#2a2a2a',
+                        darkHover: '#333333',
+                        pink: '#F2A0B5',
+                        pinkDeep: '#E8879B',
+                        pinkLight: '#FBE9EE',
+                        pinkMuted: 'rgba(242,160,181,0.15)',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'PingFang SC', 'Microsoft YaHei', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto { content-visibility: auto; }
+            .btn-pink {
+                @apply bg-pinkMuted border border-pink/30 text-pink text-sm px-3 py-1.5 rounded-full transition-all hover:bg-pink/20 hover:border-pink/50;
+            }
+            .btn-pink-active {
+                @apply bg-pink/20 border border-pink/50 text-pink text-sm px-3 py-1.5 rounded-full;
+            }
+        }
+        body { overflow: hidden; }
+        .chat-area::-webkit-scrollbar { width: 3px; }
+        .chat-area::-webkit-scrollbar-thumb { background: #444; border-radius: 10px; }
+        textarea { field-sizing: content; }
+    </style>
+</head>
+
+<body class="bg-dark text-white h-screen w-screen font-sans">
+
+    <div class="flex flex-col h-full w-full">
+
+        <!-- 顶部栏 -->
+        <header class="flex items-center justify-between px-6 py-4 border-b border-white/5 flex-shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 bg-pink/15 rounded-xl flex items-center justify-center text-lg">🌸</div>
+                <div>
+                    <span class="text-base font-semibold tracking-tight">Campus Compass</span>
+                    <span class="text-xs text-gray-500 ml-2">校园活动策划助手</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-400 bg-pinkMuted px-3 py-1 rounded-full">AI 驱动</span>
+            </div>
+        </header>
+
+        <!-- 聊天区 -->
+        <div class="chat-area flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-4" id="chatArea">
+            <!-- 欢迎区 -->
+            <div class="welcome-card flex flex-col items-center justify-center flex-1 py-16" id="welcomeCard">
+                <div class="flex items-center gap-3 mb-6">
+                    <div class="w-10 h-10 bg-pink/15 rounded-xl flex items-center justify-center text-2xl">🌸</div>
+                    <h1 class="text-2xl font-semibold tracking-tight">嗨，今天想办什么活动？</h1>
+                </div>
+
+                <p class="text-gray-400 text-sm mb-10 text-center max-w-md">
+                    告诉我你的想法，我来帮你生成完整的策划方案<br>
+                    推荐教室 · 安排流程 · 计算预算 · 导航指引
+                </p>
+
+                <div class="grid grid-cols-4 gap-3 max-w-2xl w-full">
+                    <button onclick="sendQuick('我想办一个50人的技术讲座，需要投影仪和音响')"
+                        class="flex flex-col items-center gap-2 p-4 bg-darkCard rounded-2xl border border-white/5 hover:border-pink/30 hover:bg-darkHover transition-all">
+                        <span class="text-2xl">💡</span>
+                        <span class="text-sm font-medium">技术讲座</span>
+                        <span class="text-xs text-gray-500">50人</span>
+                    </button>
+                    <button onclick="sendQuick('办一场100人的迎新晚会，要有舞台和灯光')"
+                        class="flex flex-col items-center gap-2 p-4 bg-darkCard rounded-2xl border border-white/5 hover:border-pink/30 hover:bg-darkHover transition-all">
+                        <span class="text-2xl">🎭</span>
+                        <span class="text-sm font-medium">迎新晚会</span>
+                        <span class="text-xs text-gray-500">100人</span>
+                    </button>
+                    <button onclick="sendQuick('组织一场编程竞赛，60人左右，需要投屏')"
+                        class="flex flex-col items-center gap-2 p-4 bg-darkCard rounded-2xl border border-white/5 hover:border-pink/30 hover:bg-darkHover transition-all">
+                        <span class="text-2xl">🏆</span>
+                        <span class="text-sm font-medium">编程竞赛</span>
+                        <span class="text-xs text-gray-500">60人</span>
+                    </button>
+                    <button onclick="sendQuick('在D座搞个社团沙龙，30人，简单设备就行')"
+                        class="flex flex-col items-center gap-2 p-4 bg-darkCard rounded-2xl border border-white/5 hover:border-pink/30 hover:bg-darkHover transition-all">
+                        <span class="text-2xl">☕</span>
+                        <span class="text-sm font-medium">社团沙龙</span>
+                        <span class="text-xs text-gray-500">30人</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 输入区 -->
+        <div class="flex-shrink-0 px-6 pb-6">
+            <div class="max-w-3xl mx-auto">
+                <div class="bg-darkInput/80 rounded-3xl p-4 flex flex-col gap-3 border border-white/5">
+                    <textarea id="msgInput" placeholder="输入你的活动想法，比如：我想办一个50人的技术讲座..."
+                        class="w-full bg-transparent resize-none outline-none text-gray-200 placeholder-gray-500 text-sm min-h-[24px] max-h-32"
+                        rows="1" onkeydown="handleKeyDown(event)"></textarea>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <button class="btn-pink flex items-center gap-1">
+                                <i class="fa fa-cogs text-xs"></i>
+                                智能策划
+                            </button>
+                            <button class="btn-pink flex items-center gap-1">
+                                <i class="fa fa-map-marker text-xs"></i>
+                                教室导航
+                            </button>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="text-gray-500 text-xs" id="wordCount">0</span>
+                            <button id="sendBtn"
+                                class="w-9 h-9 bg-pink/20 border border-pink/40 rounded-full flex items-center justify-center hover:bg-pink/30 transition-all disabled:opacity-30"
+                                onclick="sendMessage()">
+                                <i class="fa fa-arrow-up text-pink text-sm"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const chatArea = document.getElementById("chatArea");
+        const msgInput = document.getElementById("msgInput");
+        const sendBtn = document.getElementById("sendBtn");
+        const wordCount = document.getElementById("wordCount");
+        let isLoading = false;
+
+        msgInput.addEventListener("input", () => {
+            msgInput.style.height = "auto";
+            msgInput.style.height = Math.min(msgInput.scrollHeight, 128) + "px";
+            wordCount.textContent = msgInput.value.length;
+        });
+
+        function handleKeyDown(e) {
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+        }
+
+        function sendQuick(text) { msgInput.value = text; sendMessage(); }
+
+        function sendMessage() {
+            const msg = msgInput.value.trim();
+            if (!msg || isLoading) return;
+            isLoading = true; sendBtn.disabled = true;
+            msgInput.value = ""; msgInput.style.height = "auto"; wordCount.textContent = "0";
+
+            const welcome = document.getElementById("welcomeCard");
+            if (welcome) welcome.remove();
+
+            addUserMsg(msg);
+            addLoadingMsg();
+
+            fetch("/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: msg }),
+            })
+                .then(r => r.json())
+                .then(d => { removeLoadingMsg(); addAiMsg(d.reply); })
+                .catch(() => { removeLoadingMsg(); addAiMsg('<div class="bg-red-900/20 border border-red-500/20 text-red-300 px-5 py-3 rounded-2xl text-sm">网络请求失败，请确认服务已启动</div>'); })
+                .finally(() => { isLoading = false; sendBtn.disabled = false; msgInput.focus(); });
+        }
+
+        function addUserMsg(text) {
+            const div = document.createElement("div");
+            div.className = "flex justify-end";
+            div.innerHTML = `<div class="max-w-[70%] bg-pink/15 border border-pink/20 text-gray-100 px-5 py-3 rounded-2xl rounded-br-md text-sm leading-relaxed">${escapeHtml(text)}</div>`;
+            chatArea.appendChild(div);
+            scrollToBottom();
+        }
+
+        function addLoadingMsg() {
+            const div = document.createElement("div");
+            div.className = "flex justify-start";
+            div.id = "loadingMsg";
+            div.innerHTML = `<div class="flex gap-1.5 px-4 py-2">
+                <span class="w-2 h-2 rounded-full bg-pink/40 animate-bounce"></span>
+                <span class="w-2 h-2 rounded-full bg-pink/40 animate-bounce" style="animation-delay:0.1s"></span>
+                <span class="w-2 h-2 rounded-full bg-pink/40 animate-bounce" style="animation-delay:0.2s"></span>
+            </div>`;
+            chatArea.appendChild(div);
+            scrollToBottom();
+        }
+
+        function removeLoadingMsg() {
+            const el = document.getElementById("loadingMsg");
+            if (el) el.remove();
+        }
+
+        function addAiMsg(html) {
+            const div = document.createElement("div");
+            div.className = "flex justify-start";
+            div.innerHTML = `<div class="max-w-[85%]">${html}</div>`;
+            chatArea.appendChild(div);
+            scrollToBottom();
+        }
+
+        function scrollToBottom() { chatArea.scrollTop = chatArea.scrollHeight; }
+
+        function escapeHtml(text) {
+            const d = document.createElement("div");
+            d.textContent = text;
+            return d.innerHTML;
+        }
+    </script>
+</body>
+
+</html>

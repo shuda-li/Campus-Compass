@@ -1,0 +1,150 @@
+{
+    "讲座": {
+        "activity_type": "讲座",
+        "default_timeline": [
+            {
+                "time": "14:00-14:30",
+                "content": "签到入场"
+            },
+            {
+                "time": "14:30-14:45",
+                "content": "主持人开场"
+            },
+            {
+                "time": "14:45-16:00",
+                "content": "嘉宾演讲 / 主题分享"
+            },
+            {
+                "time": "16:00-16:30",
+                "content": "问答互动环节"
+            },
+            {
+                "time": "16:30-17:00",
+                "content": "自由交流与结束"
+            }
+        ],
+        "default_resources": [
+            "投影仪",
+            "音响",
+            "麦克风",
+            "签到表"
+        ],
+        "default_budget": {
+            "场地布置": 200,
+            "宣传物料": 150,
+            "嘉宾礼品": 100,
+            "茶歇饮料": 50
+        },
+        "minimum_capacity": 50
+    },
+    "晚会": {
+        "activity_type": "晚会",
+        "default_timeline": [
+            {
+                "time": "18:00-18:30",
+                "content": "观众入场"
+            },
+            {
+                "time": "18:30-19:00",
+                "content": "暖场节目"
+            },
+            {
+                "time": "19:00-19:15",
+                "content": "开场致辞"
+            },
+            {
+                "time": "19:15-21:00",
+                "content": "节目表演"
+            },
+            {
+                "time": "21:00-21:30",
+                "content": "合影与散场"
+            }
+        ],
+        "default_resources": [
+            "舞台",
+            "灯光",
+            "音响",
+            "投影仪",
+            "麦克风"
+        ],
+        "default_budget": {
+            "场地布置": 500,
+            "灯光音响": 300,
+            "节目道具": 200,
+            "宣传物料": 100
+        },
+        "minimum_capacity": 100
+    },
+    "竞赛": {
+        "activity_type": "竞赛",
+        "default_timeline": [
+            {
+                "time": "8:30-9:00",
+                "content": "选手签到"
+            },
+            {
+                "time": "9:00-9:15",
+                "content": "开幕式"
+            },
+            {
+                "time": "9:15-12:00",
+                "content": "正式比赛"
+            },
+            {
+                "time": "12:00-13:00",
+                "content": "午餐休息"
+            },
+            {
+                "time": "13:00-15:00",
+                "content": "决赛 / 颁奖"
+            }
+        ],
+        "default_resources": [
+            "投影仪",
+            "计时器",
+            "评分表",
+            "麦克风",
+            "音响"
+        ],
+        "default_budget": {
+            "场地布置": 300,
+            "奖品证书": 200,
+            "评委劳务": 150,
+            "宣传物料": 80
+        },
+        "minimum_capacity": 60
+    },
+    "社团活动": {
+        "activity_type": "社团活动",
+        "default_timeline": [
+            {
+                "time": "14:00-14:30",
+                "content": "成员签到"
+            },
+            {
+                "time": "14:30-15:00",
+                "content": "活动介绍"
+            },
+            {
+                "time": "15:00-16:30",
+                "content": "主题活动"
+            },
+            {
+                "time": "16:30-17:00",
+                "content": "总结与合影"
+            }
+        ],
+        "default_resources": [
+            "投影仪",
+            "音响",
+            "麦克风"
+        ],
+        "default_budget": {
+            "活动材料": 100,
+            "茶歇零食": 50,
+            "纪念品": 80
+        },
+        "minimum_capacity": 30
+    }
+}

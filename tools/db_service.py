@@ -4,18 +4,15 @@ from config import DB_PATH
 
 
 def query_rooms(capacity_min: int = 30, building: str = None) -> list:
-    """查询符合条件的教室，返回字典列表"""
+    """查询符合条件的教室，默认限定E座"""
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
-        query = "SELECT * FROM rooms WHERE capacity >= ?"
-        params = [capacity_min]
-
-        if building:
-            query += " AND building LIKE ?"
-            params.append(f"%{building}%")
+        building = building or "E座"
+        query = "SELECT * FROM rooms WHERE capacity >= ? AND building LIKE ?"
+        params = [capacity_min, f"%{building}%"]
 
         cur.execute(query, params)
         rows = cur.fetchall()

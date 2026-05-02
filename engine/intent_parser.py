@@ -21,7 +21,7 @@ def parse_intent(user_input: str) -> dict:
         "raw_input": user_input,
         "activity_type": "讲座",
         "participants": 50,
-        "building": None,
+        "building": "E座",
         "equipment": [],
         "theme": "",
     }

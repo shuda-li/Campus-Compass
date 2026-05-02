@@ -7,6 +7,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Flask, render_template, request, jsonify
 from engine.workflow import run_workflow
+from engine.memory import (
+    remember,
+    recall,
+    list_history,
+    get_history_by_id,
+    is_edit_request,
+    merge_edit,
+)
 
 app = Flask(__name__)
 
@@ -37,9 +45,22 @@ def _question_html() -> str:
 </div>'''
 
 
+def _build_edit_hint_html(prev_title: str) -> str:
+    return f'''<div class="bg-pinkMuted border border-pink/20 rounded-2xl px-5 py-3 mb-3">
+    <p class="text-xs text-pink font-semibold mb-1">📝 检测到你想修改「{prev_title}」</p>
+    <p class="text-xs text-gray-500">支持：换成X座 / 改成N人 / 加上设备 / 去掉设备</p>
+</div>'''
+
+
 @app.route("/")
 def home():
     return render_template("index.html")
+
+
+@app.route("/history", methods=["GET"])
+def history():
+    items = list_history(20)
+    return jsonify({"history": items})
 
 
 @app.route("/chat", methods=["POST"])
@@ -53,19 +74,25 @@ def chat():
     if not sid:
         sid = str(uuid.uuid4())[:8]
 
-    # 场景1：用户直接说了包含人数的完整句子 → 直接生成
-    if not _is_skip_reply(user_msg) and _has_participant_count(user_msg):
-        try:
-            result = run_workflow(user_msg)
-            return jsonify({"reply": result, "success": True, "session_id": sid})
-        except Exception as e:
-            return jsonify({
-                "reply": f"<div class='bg-red-900/20 border border-red-500/20 text-red-300 px-5 py-3 rounded-2xl text-sm'>出错了: {str(e)}</div>",
-                "success": False,
-                "session_id": sid,
-            })
+    # ===== 场景：编辑请求 =====
+    if is_edit_request(user_msg):
+        prev = recall(sid)
+        if prev:
+            combined = merge_edit(sid, user_msg)
+            if sid in _pending:
+                _pending.pop(sid, None)
+            try:
+                hint = _build_edit_hint_html(prev.get("plan", {}).get("title", "上次策划"))
+                result = run_workflow(combined, session_id=sid)
+                return jsonify({"reply": hint + result, "success": True, "session_id": sid})
+            except Exception as e:
+                return jsonify({
+                    "reply": f"<div class='bg-red-900/20 border border-red-500/20 text-red-300 px-5 py-3 rounded-2xl text-sm'>出错了: {str(e)}</div>",
+                    "success": False,
+                    "session_id": sid,
+                })
 
-    # 场景2：用户回复了人数或跳过 → 拼接原始消息再生成
+    # ===== 场景：人数预问流程中 =====
     if sid in _pending:
         original = _pending.pop(sid)
         if _is_skip_reply(user_msg):
@@ -73,7 +100,7 @@ def chat():
         else:
             combined = original + " " + user_msg
         try:
-            result = run_workflow(combined)
+            result = run_workflow(combined, session_id=sid)
             return jsonify({"reply": result, "success": True, "session_id": sid})
         except Exception as e:
             return jsonify({
@@ -82,7 +109,19 @@ def chat():
                 "session_id": sid,
             })
 
-    # 场景3：用户没提供人数 → 询问一次
+    # ===== 场景：直接生成 =====
+    if not _is_skip_reply(user_msg) and _has_participant_count(user_msg):
+        try:
+            result = run_workflow(user_msg, session_id=sid)
+            return jsonify({"reply": result, "success": True, "session_id": sid})
+        except Exception as e:
+            return jsonify({
+                "reply": f"<div class='bg-red-900/20 border border-red-500/20 text-red-300 px-5 py-3 rounded-2xl text-sm'>出错了: {str(e)}</div>",
+                "success": False,
+                "session_id": sid,
+            })
+
+    # ===== 场景：缺人数 → 询问 =====
     _pending[sid] = user_msg
     return jsonify({
         "reply": _question_html(),
@@ -94,6 +133,7 @@ def chat():
 if __name__ == "__main__":
     print("=" * 50)
     print("  🎓 Campus Compass 校园活动策划助手")
+    print("  🧠 L1+L2 记忆已启用")
     print("  浏览器打开: http://localhost:5000")
     print("=" * 50)
     app.run(debug=True, port=5000)

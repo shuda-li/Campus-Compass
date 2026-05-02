@@ -8,7 +8,7 @@ from tools.budget_calc import estimate_budget
 from formatter import build_html
 
 
-def run_workflow(user_input: str) -> str:
+def run_workflow(user_input: str, session_id: str = None) -> str:
     """
     主工作流 - 固定步骤执行:
 
@@ -21,6 +21,7 @@ def run_workflow(user_input: str) -> str:
     Step 6: 生成导航
     Step 7: 计算预算
     Step 8: 组装输出HTML
+    Step 9: 记忆存储 (L1+L2)
     """
     intent = parse_intent(user_input)
     print(f"[Step 0] 意图解析: {intent['activity_type']} {intent['participants']}人")
@@ -34,8 +35,8 @@ def run_workflow(user_input: str) -> str:
     plan = _build_plan(intent, template, ideas)
     print(f"[Step 3] 活动方案: {plan.get('title', '')}")
 
-    rooms = query_rooms(capacity_min=intent["participants"])
-    print(f"[Step 4] 查询到 {len(rooms)} 间教室")
+    rooms = query_rooms(capacity_min=intent["participants"], building=intent["building"])
+    print(f"[Step 4] 查询到 {len(rooms)} 间教室（{intent['building']}）")
 
     sorted_rooms = rank_rooms(rooms, intent, plan)
     print(f"[Step 5] 首选教室: {sorted_rooms[0].get('room_id', '?') if sorted_rooms else '无'}")
@@ -49,6 +50,15 @@ def run_workflow(user_input: str) -> str:
 
     html = build_html(plan, sorted_rooms, navigation, budget)
     print(f"[Step 8] HTML输出已生成")
+
+    if session_id:
+        try:
+            from engine.memory import remember
+            remember(session_id, user_input, intent, plan, budget, sorted_rooms, navigation)
+            print(f"[Step 9] 记忆已存储 (session: {session_id})")
+        except Exception as e:
+            print(f"[Step 9] 记忆存储失败: {e}")
+
     return html
 
 

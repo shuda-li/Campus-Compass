@@ -6,50 +6,88 @@ import uuid
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Flask, render_template, request, jsonify
-from engine.workflow import run_workflow
-from engine.memory import (
-    remember,
-    recall,
-    list_history,
-    get_history_by_id,
-    is_edit_request,
-    merge_edit,
-)
+from config import LLM_API_KEY, LLM_API_URL, LLM_MODEL
+from engine.topic_analyzer import analyze_topic, expand_topic_via_llm
+from engine.plan_generator import generate_plan, call_llm_for_plan
+from tools.db_service import query_rooms
+from engine.room_scorer import rank_rooms
+from tools.navigation import generate_navigation
+from formatter import build_html
 
 app = Flask(__name__)
 
-_pending: dict[str, str] = {}
+sessions: dict[str, dict] = {}
 
 
-def _has_participant_count(text: str) -> bool:
-    return bool(re.search(r"(\d+)\s*(人|位|名)", text))
+def _get_session(sid: str) -> dict:
+    if sid not in sessions:
+        sessions[sid] = {"step": "ask_topic", "topic": "", "expanded_topic": "", "participants": 0}
+    return sessions[sid]
 
 
-def _is_skip_reply(text: str) -> bool:
-    return text.strip().lower() in ("跳过", "skip", "不用", "算了", "不填")
-
-
-def _question_html() -> str:
+def _ask_topic_html() -> str:
     return '''<div class="bg-darkCard border border-pink/10 rounded-2xl px-5 py-4">
     <div class="flex items-center gap-2 mb-3">
-        <span class="text-lg">👥</span>
-        <span class="text-sm font-semibold text-gray-200">预计多少人参加？</span>
+        <span class="text-lg">📝</span>
+        <span class="text-sm font-semibold text-gray-200">请提供您需要策划的活动主题</span>
     </div>
     <p class="text-sm text-gray-300 leading-relaxed mb-3">
-        请告诉我预计的参与人数，我会据此推荐合适的教室和预算。<br>
-        输入数字即可（如 "50" 或 "50人"），也可以直接说 <span class="text-pink font-semibold">跳过</span>。
+        请描述您想举办的活动，可以是简要关键词或详细描述。<br>
+        例如：<span class="text-pink">"科技创新活动"</span>、<span class="text-pink">"电脑硬件知识分享会"</span>
     </p>
     <div class="flex items-center gap-2">
-        <span class="text-xs text-gray-500">💡 输入人数 或 回复"跳过"</span>
+        <span class="text-xs text-gray-500">💡 输入活动主题后按 Enter 发送</span>
     </div>
 </div>'''
 
 
-def _build_edit_hint_html(prev_title: str) -> str:
-    return f'''<div class="bg-pinkMuted border border-pink/20 rounded-2xl px-5 py-3 mb-3">
-    <p class="text-xs text-pink font-semibold mb-1">📝 检测到你想修改「{prev_title}」</p>
-    <p class="text-xs text-gray-500">支持：换成X座 / 改成N人 / 加上设备 / 去掉设备</p>
+def _ask_participants_html(topic: str, was_expanded: bool) -> str:
+    hint = ""
+    if was_expanded:
+        hint = f'<p class="text-xs text-pink mb-2">✨ 您的主题已扩展为：<strong>{topic}</strong></p>'
+    return f'''<div class="bg-darkCard border border-pink/10 rounded-2xl px-5 py-4">
+    <div class="flex items-center gap-2 mb-3">
+        <span class="text-lg">👥</span>
+        <span class="text-sm font-semibold text-gray-200">请问该活动预计参与人数大约是多少？</span>
+    </div>
+    {hint}
+    <p class="text-sm text-gray-300 leading-relaxed mb-3">
+        请告诉我预计参与人数，我会据此推荐合适的教室规格。<br>
+        输入数字即可（如 <span class="text-pink font-semibold">50</span> 或 <span class="text-pink font-semibold">80人</span>）
+    </p>
+    <div class="flex items-center gap-2">
+        <span class="text-xs text-gray-500">💡 输入人数后按 Enter</span>
+    </div>
 </div>'''
+
+
+def _topic_expand_notice(original: str, expanded: str) -> str:
+    return f'''<div class="bg-pinkMuted border border-pink/20 rounded-2xl px-5 py-3 mb-3">
+    <p class="text-xs text-pink font-semibold mb-1">🔍 检测到主题较简略，已自动扩展</p>
+    <p class="text-xs text-gray-400">"{original}" → <span class="text-pink">"{expanded}"</span></p>
+</div>'''
+
+
+def _venue_recommend_html(rooms: list, participants: int) -> str:
+    if not rooms:
+        return ""
+    top = rooms[0]
+    return f'''<div class="bg-darkCard border border-green-500/10 rounded-2xl px-5 py-3 mb-3">
+    <div class="flex items-center gap-2 mb-2">
+        <span class="text-lg">🏫</span>
+        <span class="text-sm font-semibold text-gray-200">场地推荐</span>
+    </div>
+    <p class="text-xs text-gray-400">
+        根据 {participants} 人规模，推荐 <span class="text-pink font-semibold">{top.get("room_id","")}</span>（{top.get("building","")} {top.get("floor","")}F，容纳 {top.get("capacity","")} 人）
+    </p>
+</div>'''
+
+
+def _extract_participants(text: str) -> int:
+    m = re.search(r"(\d+)\s*(人|位|名)?", text)
+    if m:
+        return int(m.group(1))
+    return 0
 
 
 @app.route("/")
@@ -57,83 +95,108 @@ def home():
     return render_template("index.html")
 
 
-@app.route("/history", methods=["GET"])
-def history():
-    items = list_history(20)
-    return jsonify({"history": items})
-
-
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.get_json()
     user_msg = data.get("message", "").strip()
     if not user_msg:
-        return jsonify({"reply": "请输入您的活动想法~", "success": False})
+        return jsonify({"reply": "请提供活动主题~", "success": False})
 
     sid = data.get("session_id", "")
     if not sid:
         sid = str(uuid.uuid4())[:8]
+    state = _get_session(sid)
 
-    # ===== 场景：编辑请求 =====
-    if is_edit_request(user_msg):
-        prev = recall(sid)
-        if prev:
-            combined = merge_edit(sid, user_msg)
-            if sid in _pending:
-                _pending.pop(sid, None)
-            try:
-                hint = _build_edit_hint_html(prev.get("plan", {}).get("title", "上次策划"))
-                result = run_workflow(combined, session_id=sid)
-                return jsonify({"reply": hint + result, "success": True, "session_id": sid})
-            except Exception as e:
-                return jsonify({
-                    "reply": f"<div class='bg-red-900/20 border border-red-500/20 text-red-300 px-5 py-3 rounded-2xl text-sm'>出错了: {str(e)}</div>",
-                    "success": False,
-                    "session_id": sid,
-                })
+    # ===== Step 1: 询问主题 → 用户输入主题 =====
+    if state["step"] == "ask_topic":
+        state["topic"] = user_msg
 
-    # ===== 场景：人数预问流程中 =====
-    if sid in _pending:
-        original = _pending.pop(sid)
-        if _is_skip_reply(user_msg):
-            combined = original
+        has_llm = bool(LLM_API_KEY)
+        expand_fn = (lambda t: expand_topic_via_llm(t, LLM_API_KEY, LLM_API_URL, LLM_MODEL)) if has_llm else None
+        result = analyze_topic(user_msg, expand_fn)
+
+        if result["is_simple"] and result["expanded"]:
+            state["expanded_topic"] = result["expanded"]
+            state["step"] = "ask_participants"
+            notice = _topic_expand_notice(result["original"], result["expanded"])
+            question = _ask_participants_html(result["expanded"], True)
+            return jsonify({"reply": notice + question, "success": True, "session_id": sid})
         else:
-            combined = original + " " + user_msg
+            state["expanded_topic"] = user_msg
+            state["step"] = "ask_participants"
+            return jsonify({
+                "reply": _ask_participants_html(user_msg, False),
+                "success": True,
+                "session_id": sid,
+            })
+
+    # ===== Step 2: 询问人数 → 用户输入人数 =====
+    if state["step"] == "ask_participants":
+        participants = _extract_participants(user_msg)
+        if participants == 0:
+            participants = 30
+        state["participants"] = participants
+        state["step"] = "done"
+
+        topic = state["expanded_topic"] or state["topic"]
+
         try:
-            result = run_workflow(combined, session_id=sid)
-            return jsonify({"reply": result, "success": True, "session_id": sid})
+            rooms = query_rooms(capacity_min=participants, building="E教学楼")
+            intent = {"building": "E教学楼", "equipment": [], "participants": participants}
+            sorted_rooms = rank_rooms(rooms, intent) if rooms else []
+            nav = generate_navigation(sorted_rooms[0]) if sorted_rooms else ""
+
+            has_llm = bool(LLM_API_KEY)
+            llm_fn = (lambda t, p: call_llm_for_plan(t, p, LLM_API_KEY, LLM_API_URL, LLM_MODEL)) if has_llm else None
+            plan = generate_plan(topic, participants, sorted_rooms, llm_fn)
+
+            venue_html = _venue_recommend_html(sorted_rooms, participants)
+            plan_html = build_html(plan, sorted_rooms, nav)
+
+            return jsonify({
+                "reply": venue_html + plan_html,
+                "success": True,
+                "session_id": sid,
+            })
         except Exception as e:
             return jsonify({
-                "reply": f"<div class='bg-red-900/20 border border-red-500/20 text-red-300 px-5 py-3 rounded-2xl text-sm'>出错了: {str(e)}</div>",
+                "reply": f"<div class='bg-red-900/20 border border-red-500/20 text-red-300 px-5 py-3 rounded-2xl text-sm'>生成方案时出错: {str(e)}</div>",
                 "success": False,
                 "session_id": sid,
             })
 
-    # ===== 场景：直接生成 =====
-    if not _is_skip_reply(user_msg) and _has_participant_count(user_msg):
-        try:
-            result = run_workflow(user_msg, session_id=sid)
-            return jsonify({"reply": result, "success": True, "session_id": sid})
-        except Exception as e:
+    # ===== 已完成：重新开始 =====
+    if state["step"] == "done":
+        sessions.pop(sid, None)
+        new_state = _get_session(sid)
+        new_state["topic"] = user_msg
+        has_llm = bool(LLM_API_KEY)
+        expand_fn = (lambda t: expand_topic_via_llm(t, LLM_API_KEY, LLM_API_URL, LLM_MODEL)) if has_llm else None
+        result = analyze_topic(user_msg, expand_fn)
+        if result["is_simple"] and result["expanded"]:
+            new_state["expanded_topic"] = result["expanded"]
+            new_state["step"] = "ask_participants"
             return jsonify({
-                "reply": f"<div class='bg-red-900/20 border border-red-500/20 text-red-300 px-5 py-3 rounded-2xl text-sm'>出错了: {str(e)}</div>",
-                "success": False,
+                "reply": _topic_expand_notice(result["original"], result["expanded"]) + _ask_participants_html(result["expanded"], True),
+                "success": True,
+                "session_id": sid,
+            })
+        else:
+            new_state["expanded_topic"] = user_msg
+            new_state["step"] = "ask_participants"
+            return jsonify({
+                "reply": _ask_participants_html(user_msg, False),
+                "success": True,
                 "session_id": sid,
             })
 
-    # ===== 场景：缺人数 → 询问 =====
-    _pending[sid] = user_msg
-    return jsonify({
-        "reply": _question_html(),
-        "success": True,
-        "session_id": sid,
-    })
+    return jsonify({"reply": "请提供活动主题~", "success": False, "session_id": sid})
 
 
 if __name__ == "__main__":
     print("=" * 50)
     print("  🎓 Campus Compass 校园活动策划助手")
-    print("  🧠 L1+L2 记忆已启用")
+    print("  🧠 主题智能处理 + 结构化方案生成")
     print("  浏览器打开: http://localhost:5000")
     print("=" * 50)
     app.run(debug=True, port=5000)

@@ -10,7 +10,7 @@ def query_rooms(capacity_min: int = 30, building: str = None) -> list:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
-        building = building or "E座"
+        building = building or "E教学楼"
         query = "SELECT * FROM rooms WHERE capacity >= ? AND building LIKE ?"
         params = [capacity_min, f"%{building}%"]
 

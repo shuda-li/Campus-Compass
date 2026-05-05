@@ -69,34 +69,51 @@
             <div class="welcome-card flex flex-col items-center justify-center flex-1 py-16" id="welcomeCard">
                 <div class="flex items-center gap-3 mb-6">
                     <div class="w-10 h-10 bg-pink/15 rounded-xl flex items-center justify-center text-2xl">🌸</div>
-                    <h1 class="text-2xl font-semibold tracking-tight">嗨，今天想办什么活动？</h1>
+                    <h1 class="text-2xl font-semibold tracking-tight">Campus Compass</h1>
                 </div>
 
-                <p class="text-gray-400 text-sm mb-10 text-center max-w-md">
-                    告诉我你的想法，我来帮你生成完整的策划方案<br>
-                    活动地点：<span class="text-pink font-semibold">E教学楼</span> · 智能匹配合适教室
+                <p class="text-gray-400 text-sm mb-6 text-center max-w-md">
+                    智能活动策划助手<br>
+                    输入活动主题 → 确认参与人数 → 一键生成完整方案<br>
+                    活动地点：<span class="text-pink font-semibold">E教学楼</span>
                 </p>
 
+                <div class="bg-darkCard border border-pink/10 rounded-2xl px-5 py-4 mb-8 max-w-md w-full text-left">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="text-lg">📝</span>
+                        <span class="text-sm font-semibold text-gray-200">请提供您需要策划的活动主题</span>
+                    </div>
+                    <p class="text-xs text-gray-400 leading-relaxed">
+                        可以是简要关键词或详细描述，系统会自动判断是否需要扩展
+                    </p>
+                </div>
+
                 <div class="grid grid-cols-4 gap-3 max-w-2xl w-full">
-                    <button onclick="sendQuick('我想在E座办一个50人的技术讲座，需要投影仪和音响')"
+                    <button onclick="sendQuick('科技创新活动')"
                         class="flex flex-col items-center gap-2 p-4 bg-darkCard rounded-2xl border border-white/5 hover:border-pink/30 hover:bg-darkHover transition-all">
-                        <span class="text-2xl">💡</span>
-                        <span class="text-sm font-medium">技术讲座</span>
-                        <span class="text-xs text-gray-500">50人</span>
+                        <span class="text-2xl">🚀</span>
+                        <span class="text-sm font-medium">科技创新</span>
+                        <span class="text-xs text-gray-500">自动扩展</span>
                     </button>
-                    <button onclick="sendQuick('在E座办一场100人的迎新晚会，要有舞台和灯光')"
+                    <button onclick="sendQuick('电脑硬件知识分享会')"
                         class="flex flex-col items-center gap-2 p-4 bg-darkCard rounded-2xl border border-white/5 hover:border-pink/30 hover:bg-darkHover transition-all">
                         <span class="text-2xl">🎭</span>
-                        <span class="text-sm font-medium">迎新晚会</span>
-                        <span class="text-xs text-gray-500">100人</span>
+                        <span class="text-sm font-medium">硬件分享</span>
+                        <span class="text-xs text-gray-500">直接采用</span>
                     </button>
-                    <button onclick="sendQuick('在E座组织编程竞赛，60人，需要投屏和音响')"
+                    <button onclick="sendQuick('校园音乐节')"
+                        class="flex flex-col items-center gap-2 p-4 bg-darkCard rounded-2xl border border-white/5 hover:border-pink/30 hover:bg-darkHover transition-all">
+                        <span class="text-2xl">🎵</span>
+                        <span class="text-sm font-medium">校园音乐</span>
+                        <span class="text-xs text-gray-500">自动扩展</span>
+                    </button>
+                    <button onclick="sendQuick('大学生编程马拉松挑战赛')"
                         class="flex flex-col items-center gap-2 p-4 bg-darkCard rounded-2xl border border-white/5 hover:border-pink/30 hover:bg-darkHover transition-all">
                         <span class="text-2xl">🏆</span>
-                        <span class="text-sm font-medium">编程竞赛</span>
-                        <span class="text-xs text-gray-500">60人</span>
+                        <span class="text-sm font-medium">编程马拉松</span>
+                        <span class="text-xs text-gray-500">直接采用</span>
                     </button>
-                    <button onclick="sendQuick('在E座搞个社团沙龙，30人，简单设备就行')"
+                    <button onclick="sendQuick('校园摄影展')"
                         class="flex flex-col items-center gap-2 p-4 bg-darkCard rounded-2xl border border-white/5 hover:border-pink/30 hover:bg-darkHover transition-all">
                         <span class="text-2xl">☕</span>
                         <span class="text-sm font-medium">社团沙龙</span>
@@ -110,7 +127,7 @@
         <div class="flex-shrink-0 px-6 pb-6">
             <div class="max-w-3xl mx-auto">
                 <div class="bg-darkInput/80 rounded-3xl p-4 flex flex-col gap-3 border border-white/5">
-                    <textarea id="msgInput" placeholder="输入你的活动想法，比如：我想办一个50人的技术讲座..."
+                    <textarea id="msgInput" placeholder="输入活动主题，如：科技创新活动 或 电脑硬件知识分享会..."
                         class="w-full bg-transparent resize-none outline-none text-gray-200 placeholder-gray-500 text-sm min-h-[24px] max-h-32"
                         rows="1" onkeydown="handleKeyDown(event)"></textarea>
                     <div class="flex items-center justify-between">

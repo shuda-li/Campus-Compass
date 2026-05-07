@@ -1,6 +1,5 @@
 from data.init_db import init_database
 from engine.workflow import run_workflow
-from formatter import build_markdown
 
 
 def main():

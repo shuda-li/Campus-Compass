@@ -90,13 +90,10 @@ def init_database(db_path: str = None):
     ]
 
     for room in rooms:
-        try:
-            cur.execute(
-                "INSERT INTO rooms VALUES (?,?,?,?,?,?,?,?,?,?)",
-                room
-            )
-        except sqlite3.IntegrityError:
-            pass
+        cur.execute(
+            "INSERT OR IGNORE INTO rooms VALUES (?,?,?,?,?,?,?,?,?,?)",
+            room
+        )
 
     conn.commit()
     conn.close()

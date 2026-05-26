@@ -311,10 +311,10 @@ def _reason_plan(topic: str, participants: int, rooms: list) -> dict:
 
     return {
         "activity_purpose": purpose,
-        "activity_time": "XXX",
+        "activity_time": "待定（请根据实际安排填写）",
         "activity_topic": topic,
-        "organizer": "XXX",
-        "host": "XXX",
+        "organizer": "待定（主办单位）",
+        "host": "待定（承办单位）",
         "activity_content": activities,
         "activity_materials": materials,
     }

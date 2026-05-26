@@ -1,11 +1,11 @@
 from engine.intent_parser import parse_intent
 from engine.template_matcher import match_template
 from engine.room_scorer import rank_rooms
-from llm_client import call_llm_for_ideation
+from agent.llm_client import call_llm_for_ideation
 from tools.db_service import query_rooms
 from tools.navigation import generate_navigation
 from tools.budget_calc import estimate_budget
-from formatter import build_html
+from agent.formatter import build_html
 
 
 def run_workflow(user_input: str, session_id: str = None) -> str:
@@ -46,14 +46,14 @@ def run_workflow(user_input: str, session_id: str = None) -> str:
     print(f"[Step 6] 导航已生成")
 
     budget = estimate_budget(template, intent.get("participants", 50))
-    print(f"[Step 7] 预算: {sum(budget.values())}元")
+    print(f"[Step 7] 预算: {budget.get('合计', 0)}元")
 
     html = build_html(plan, sorted_rooms, navigation, budget)
     print(f"[Step 8] HTML输出已生成")
 
     if session_id:
         try:
-            from engine.memory import remember
+            from agent.memory import remember
             remember(session_id, user_input, intent, plan, budget, sorted_rooms, navigation)
             print(f"[Step 9] 记忆已存储 (session: {session_id})")
         except Exception as e:

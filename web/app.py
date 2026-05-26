@@ -2,6 +2,9 @@ import sys
 import os
 import re
 import uuid
+import json
+import threading
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -12,11 +15,33 @@ from engine.plan_generator import generate_plan, call_llm_for_plan
 from tools.db_service import query_rooms
 from engine.room_scorer import rank_rooms
 from tools.navigation import generate_navigation
-from formatter import build_html
+from agent.formatter import build_html
 
 app = Flask(__name__)
 
-sessions: dict[str, dict] = {}
+SESSION_FILE = Path(__file__).parent.parent / ".memory" / "web_sessions.json"
+_lock = threading.Lock()
+
+
+def _load_sessions() -> dict:
+    try:
+        if SESSION_FILE.exists():
+            return json.loads(SESSION_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _save_sessions(ss: dict):
+    try:
+        SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with _lock:
+            SESSION_FILE.write_text(json.dumps(ss, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+sessions: dict[str, dict] = _load_sessions()
 
 
 def _get_session(sid: str) -> dict:
@@ -110,6 +135,8 @@ def chat():
     # ===== Step 1: 询问主题 → 用户输入主题 =====
     if state["step"] == "ask_topic":
         state["topic"] = user_msg
+        state["step"] = "ask_participants"
+        _save_sessions(sessions)
 
         has_llm = bool(LLM_API_KEY)
         expand_fn = (lambda t: expand_topic_via_llm(t, LLM_API_KEY, LLM_API_URL, LLM_MODEL)) if has_llm else None
@@ -117,13 +144,13 @@ def chat():
 
         if result["is_simple"] and result["expanded"]:
             state["expanded_topic"] = result["expanded"]
-            state["step"] = "ask_participants"
+            _save_sessions(sessions)
             notice = _topic_expand_notice(result["original"], result["expanded"])
             question = _ask_participants_html(result["expanded"], True)
             return jsonify({"reply": notice + question, "success": True, "session_id": sid})
         else:
             state["expanded_topic"] = user_msg
-            state["step"] = "ask_participants"
+            _save_sessions(sessions)
             return jsonify({
                 "reply": _ask_participants_html(user_msg, False),
                 "success": True,
@@ -136,7 +163,59 @@ def chat():
         if participants == 0:
             participants = 30
         state["participants"] = participants
+        state["step"] = "ask_details"
+        _save_sessions(sessions)
+
+        reply = f'''<div class="bg-darkCard border border-pink/10 rounded-2xl px-5 py-4">
+    <div class="flex items-center gap-2 mb-3">
+        <span class="text-lg">📋</span>
+        <span class="text-sm font-semibold text-gray-200">确认活动信息</span>
+    </div>
+    <p class="text-sm text-gray-300 leading-relaxed mb-2">
+        主题：<span class="text-pink font-semibold">{state["expanded_topic"] or state["topic"]}</span><br>
+        人数：<span class="text-pink font-semibold">{participants}人</span>
+    </p>
+    <p class="text-xs text-gray-400 mb-3">
+        如需补充活动时间、物资清单、人员分工等信息，请直接描述。<br>
+        例如：<span class="text-pink">"5月10日下午，需要投影仪和音响"</span><br>
+        如果不需要补充，直接回复 <span class="text-pink font-semibold">"生成方案"</span>
+    </p>
+</div>'''
+        return jsonify({"reply": reply, "success": True, "session_id": sid})
+
+    # ===== Step 3: 补充细节（可选）=====
+    if state["step"] == "ask_details":
+        if any(kw in user_msg for kw in ["生成", "直接生成", "好了", "可以了", "ok", "OK", "下一步", "跳过"]):
+            # 用户跳过，直接生成
+            pass
+        else:
+            # 用户提供了细节，用 completeness_checker 评估
+            from engine.completeness_checker import AssessmentState, evaluate_completeness, format_complete_html
+            assessment = AssessmentState()
+            assessment.feed(user_msg)
+            result_check = evaluate_completeness(assessment)
+
+            # 保存细节
+            state["details"] = state.get("details", "") + "\n" + user_msg
+            _save_sessions(sessions)
+
+            if result_check["complete"]:
+                return jsonify({
+                    "reply": format_complete_html(result_check["collected_summary"]),
+                    "success": True,
+                    "session_id": sid,
+                })
+            elif result_check["next_question"]:
+                from engine.completeness_checker import format_question_html
+                return jsonify({
+                    "reply": format_question_html(result_check["next_question"], result_check["collected_summary"]),
+                    "success": True,
+                    "session_id": sid,
+                })
+
+        # 生成方案
         state["step"] = "done"
+        _save_sessions(sessions)
 
         topic = state["expanded_topic"] or state["topic"]
 
@@ -165,9 +244,10 @@ def chat():
                 "session_id": sid,
             })
 
-    # ===== 已完成：重新开始 =====
+   # ===== 已完成：重新开始 =====
     if state["step"] == "done":
         sessions.pop(sid, None)
+        _save_sessions(sessions)
         new_state = _get_session(sid)
         new_state["topic"] = user_msg
         has_llm = bool(LLM_API_KEY)

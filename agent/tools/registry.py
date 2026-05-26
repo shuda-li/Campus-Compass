@@ -166,6 +166,21 @@ TOOL_DEFINITIONS = [
             }
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_web",
+            "description": "搜索互联网获取实时信息。可用于：了解活动主题的背景知识、查找类似活动案例、获取创意灵感。返回搜索结果摘要和链接",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "搜索关键词，建议包含'校园活动'相关词以提高相关性"},
+                    "max_results": {"type": "integer", "description": "最大结果数，默认3，最大5"}
+                },
+                "required": ["query"]
+            }
+        }
+    },
 ]
 
 
@@ -301,6 +316,12 @@ def dispatch_tool(tool_name: str, arguments: dict, state) -> str:
             agent_type = arguments.get("agent_type", "classroom_scout")
             prompt = arguments.get("prompt", "")
             return run_subagent(agent_type, prompt, state)
+
+        if tool_name == "search_web":
+            from agent.mcp.tavily_search import search_web
+            query = arguments.get("query", "")
+            max_results = min(arguments.get("max_results", 3), 5)
+            return search_web(query, max_results=max_results)
 
         return json.dumps({"ok": False, "error": f"未知工具: {tool_name}"}, ensure_ascii=False)
 

@@ -97,7 +97,7 @@ def init_database(db_path: str = None):
 
     conn.commit()
     conn.close()
-    print("✓ 数据库初始化完成（E座 12 间教室）")
+    print("[OK] 数据库初始化完成（E座 12 间教室）")
 
 
 if __name__ == "__main__":

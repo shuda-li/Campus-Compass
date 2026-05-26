@@ -4,8 +4,8 @@ from agent.agent_loop import run_agent
 
 def main():
     print("=" * 50)
-    print("  🎓 Campus Compass - 校园活动策划 Agent")
-    print("  🧠 LLM 驱动 · 工具调用 · 闭环决策")
+    print("  Campus Compass - 校园活动策划 Agent")
+    print("  LLM驱动 · 工具调用 · 闭环决策")
     print("=" * 50)
     print()
 

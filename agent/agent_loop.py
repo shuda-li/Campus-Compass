@@ -45,7 +45,8 @@ SYSTEM_PROMPT = """你是 Campus Compass 校园活动策划 Agent。你通过调
 - 工具返回空或出错时，不要卡住，继续下一步
 - 工具调用之间的文字输出简短即可
 - 用户有长期记忆时，参考记忆中的偏好
-- 如果用户在活动中表现出偏好（常用建筑、惯用人数），调用 save_user_preference 保存"""
+- 如果用户在活动中表现出偏好（常用建筑、惯用人数），调用 save_user_preference 保存
+- 对于不熟悉的活动主题，可以使用 search_web 搜索背景知识和案例来丰富方案内容"""
 
 
 def _build_system_prompt() -> str:

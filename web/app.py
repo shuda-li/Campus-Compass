@@ -217,6 +217,7 @@ def chat():
         state["step"] = "done"
         _save_sessions(sessions)
 
+        participants = state["participants"]
         topic = state["expanded_topic"] or state["topic"]
 
         try:

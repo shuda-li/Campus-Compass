@@ -123,10 +123,21 @@ def run_agent(user_input: str, session_id: str = None) -> str:
             trace.llm_call(tokens_in, tokens_out, len(tool_calls))
 
             if msg.get("content"):
-                print(f"[Agent] 💬 {msg['content'][:120]}")
+                print(f"[Agent] [talk] {msg['content'][:120]}")
 
             if not tool_calls:
-                print("[Agent] ✅ 无工具调用，Agent 认为任务完成")
+                pending = [t for t in state.todos if t["status"] != "completed"] if state.todos else None
+                if pending:
+                    nag = (
+                        "[System] 你必须调用工具来执行步骤，而不是描述你要做什么。"
+                        "当前待办：" + _render_todo_section(state.todos) +
+                        "\n请调用对应的工具函数（如 parse_user_input），不要只说'正在调用'。"
+                    )
+                    messages.append({"role": "user", "content": nag})
+                    state.rounds_since_todo = 0
+                    print("[Agent] [WARN] LLM 描述而非调工具，已推回并要求调工具")
+                    continue
+                print("[Agent] [OK] 无工具调用，Agent 认为任务完成")
                 break
 
             messages.append(msg)
@@ -137,7 +148,7 @@ def run_agent(user_input: str, session_id: str = None) -> str:
                     func_args = json.loads(tc["function"]["arguments"])
                 except json.JSONDecodeError:
                     func_args = {}
-                print(f"[Agent] 🔧 {func_name}({json.dumps(func_args, ensure_ascii=False)[:100]})")
+                print(f"[Agent] [tool] {func_name}({json.dumps(func_args, ensure_ascii=False)[:100]})")
 
                 t_tool0 = time.time()
                 result = dispatch_tool(func_name, func_args, state)
@@ -145,7 +156,7 @@ def run_agent(user_input: str, session_id: str = None) -> str:
                 trace.tool_exec(func_name, json.loads(result).get("ok", False), (t_tool1 - t_tool0) * 1000)
 
                 result_preview = result[:200] if len(result) > 200 else result
-                print(f"[Agent] 📥 {result_preview}")
+                print(f"[Agent] [result] {result_preview}")
 
                 messages.append({
                     "role": "tool",
@@ -154,7 +165,7 @@ def run_agent(user_input: str, session_id: str = None) -> str:
                 })
 
                 if func_name == "finalize":
-                    print("[Agent] ✅ Agent 调用 finalize，任务完成")
+                    print("[Agent] [OK] Agent 调用 finalize，任务完成")
                     trace.dump()
                     print(f"[Trace] {trace.report()}")
                     if state.html_output:
@@ -163,7 +174,7 @@ def run_agent(user_input: str, session_id: str = None) -> str:
 
         # LLM 循环结束但未 finalize
         if state.plan and not state.html_output:
-            print("[Agent] ⚠️ 未调用 finalize，用已有数据生成")
+            print("[Agent] [WARN] 未调用 finalize，用已有数据生成")
             from agent.formatter import build_html
             from agent.memory.persistence import auto_remember
             state.html_output = build_html(state.plan, state.sorted_rooms, state.navigation, state.budget)
@@ -175,7 +186,7 @@ def run_agent(user_input: str, session_id: str = None) -> str:
         if state.html_output:
             return state.html_output
 
-    print("[Agent] 🔄 降级为确定性流水线模式")
+    print("[Agent] [Fallback] 降级为确定性流水线模式")
     return _run_fallback_pipeline(user_input, state, session_id, trace)
 
 

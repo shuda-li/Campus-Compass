@@ -46,12 +46,18 @@ def expand_topic(topic: str) -> str:
 
 
 def generate_plan(topic: str, participants: int) -> dict:
-    from engine.plan_generator import build_plan_prompt, parse_plan_response
-    prompt = build_plan_prompt(topic, participants)
+    from engine.plan_generator import build_plan_prompt, parse_plan_response, _search_topic_knowledge
+    
+    # 先通过MCP搜索获取主题相关知识
+    search_knowledge = _search_topic_knowledge(topic)
+    if search_knowledge.get("available"):
+        print(f"[LLM] 已获取主题相关搜索知识")
+    
+    prompt = build_plan_prompt(topic, participants, search_knowledge)
     content = complete(
         prompt,
-        system="你是校园活动策划专家，请严格按照要求的JSON格式输出活动方案。",
-        temperature=0.7,
+        system="你是校园活动策划专家。你的回答必须只包含JSON，不要有其他文字。",
+        temperature=0.8,
         max_tokens=2000,
         timeout=25,
     )

@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime
 
 
-HISTORY_DB = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "history.db")
+HISTORY_DB = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "history.db")
 
 # ============ L1: 内存短期记忆 ============
 _recent: dict[str, dict] = {}
@@ -132,12 +132,13 @@ def merge_edit(session_id: str, edit_msg: str) -> str:
 
 def _save_to_history(session_id: str, raw_input: str, plan: dict):
     """L2: 持久化到 SQLite"""
+    os.makedirs(os.path.dirname(HISTORY_DB), exist_ok=True)
     conn = sqlite3.connect(HISTORY_DB)
     cur = conn.cursor()
     _ensure_history_table(cur)
     cur.execute(
         "INSERT INTO history (session_id, raw_input, plan_title, plan_json, created_at) VALUES (?,?,?,?,?)",
-        [session_id, raw_input, plan.get("title", ""), json.dumps(plan, ensure_ascii=False),
+        [session_id, raw_input, plan.get("activity_topic", plan.get("title", "")), json.dumps(plan, ensure_ascii=False),
          datetime.now().isoformat()],
     )
     conn.commit()

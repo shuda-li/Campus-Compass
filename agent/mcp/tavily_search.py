@@ -1,37 +1,62 @@
+import os
+import requests
 import json
-from config import TAVILY_API_KEY
 
 
-def search_web(query: str, max_results: int = 3, include_answer: bool = True) -> str:
-    if not TAVILY_API_KEY:
-        return json.dumps({"ok": False, "error": "TAVILY_API_KEY 未配置"}, ensure_ascii=False)
+def _get_proxies():
+    from agent.proxy import get_proxy
+    return get_proxy()
 
+
+def search_web(query, max_results=3, search_depth="basic"):
     try:
-        from tavily import TavilyClient
-        client = TavilyClient(api_key=TAVILY_API_KEY)
-        result = client.search(query, max_results=max_results, include_answer=include_answer)
+        api_key = os.environ.get('TAVILY_API_KEY')
+        if not api_key:
+            return json.dumps({"ok": False, "answer": "", "results": []})
 
-        answer = result.get("answer", "")
-        results = result.get("results", [])
+        response = requests.post(
+            "https://api.tavily.com/search",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}"
+            },
+            json={
+                "query": query,
+                "max_results": max_results,
+                "search_depth": search_depth
+            },
+            proxies=_get_proxies(),
+            timeout=30
+        )
 
-        output = {"ok": True, "answer": answer, "results": []}
-        for r in results:
-            output["results"].append({
-                "title": r.get("title", ""),
-                "url": r.get("url", ""),
-                "snippet": (r.get("content", "") or "")[:300],
+        data = response.json()
+
+        results = []
+        for r in data.get('results', []):
+            results.append({
+                "title": r.get('title', ''),
+                "url": r.get('url', ''),
+                "snippet": r.get('content', '')
             })
 
-        return json.dumps(output, ensure_ascii=False)
-
+        return json.dumps({
+            "ok": True,
+            "answer": data.get('answer', ''),
+            "results": results
+        })
     except Exception as e:
-        return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
+        print(f"[Tavily Error] {e}")
+        return json.dumps({"ok": False, "answer": "", "results": []})
 
 
-def search_activity_trends(topic: str) -> str:
-    query = f"校园活动策划 {topic} 创意 流程"
-    return search_web(query, max_results=3, include_answer=True)
+def is_available():
+    return os.environ.get('TAVILY_API_KEY') is not None
 
 
-def is_available() -> bool:
-    return bool(TAVILY_API_KEY)
+if __name__ == "__main__":
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    print("Testing Tavily...")
+    result = search_web("校园活动策划", max_results=2)
+    print(result)

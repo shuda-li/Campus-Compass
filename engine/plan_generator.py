@@ -134,10 +134,19 @@ def build_plan_prompt(topic: str, participants: int, search_knowledge: dict = No
             knowledge_part += f"\n参考案例{i+1}: {r.get('title', '')}\n{r.get('snippet', '')}\n"
         knowledge_part += "===================================\n"
 
+    memory_part = ""
+    try:
+        from agent.memory import load_memory_block
+        block = load_memory_block()
+        if block:
+            memory_part = f"\n===== 用户历史偏好 =====\n{block}\n===========================\n"
+    except Exception:
+        pass
+
     return f'''你是一个有创意的校园活动策划师。请为主题"{topic}"设计一个独特、有趣、可执行的活动方案。
 
 参与人数: {participants}人
-{knowledge_part}
+{knowledge_part}{memory_part}
 核心原则:
 1. 深入理解"{topic}"的真正含义——如果它涉及专业知识（如MBTI人格理论、编程技术、心理学等），你必须展现对该领域的理解
 2. 活动目的要写出"{topic}"这个主题的独特价值，不要写"搭建平台""促进交流"这种万能套话
@@ -163,16 +172,40 @@ def build_plan_prompt(topic: str, participants: int, search_knowledge: dict = No
 
 def parse_plan_response(content: str) -> dict:
     content = content.strip()
+    
+    # 清理 Markdown 代码块标记
     if content.startswith("```"):
         lines = content.split("\n")
         content = "\n".join(lines[1:]) if len(lines) > 1 else content
         if content.rstrip().endswith("```"):
             content = content[: content.rfind("```")]
-    return json.loads(content)
+    
+    content = content.strip()
+    
+    # 尝试直接解析
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError as e:
+        print(f"[PlanGen] 直接解析失败: {e}")
+    
+    # 尝试找到 JSON 对象的开始和结束
+    try:
+        # 找到第一个 { 和最后一个 }
+        start = content.find("{")
+        end = content.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            json_str = content[start:end+1]
+            return json.loads(json_str)
+    except Exception as e:
+        print(f"[PlanGen] 提取JSON后解析也失败: {e}")
+    
+    # 如果都失败了，尝试使用 _ultimate_fallback
+    raise ValueError("无法解析 LLM 返回的 JSON")
 
 
 def call_llm_for_plan(topic: str, participants: int, api_key: str, api_url: str, model: str, search_knowledge: dict = None) -> dict:
     import requests
+    from agent.proxy import get_proxy
     prompt = build_plan_prompt(topic, participants, search_knowledge)
     response = requests.post(
         api_url,
@@ -187,9 +220,10 @@ def call_llm_for_plan(topic: str, participants: int, api_key: str, api_url: str,
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.8,
-            "max_tokens": 2000,
+            "max_tokens": 4000,
         },
         timeout=25,
+        proxies=get_proxy(),
     )
     data = response.json()
     content = data["choices"][0]["message"]["content"]

@@ -20,10 +20,38 @@
                         pinkDeep: '#E8879B',
                         pinkLight: '#FBE9EE',
                         pinkMuted: 'rgba(242,160,181,0.15)',
+                        greenOk: '#4ade80',
+                        redErr: '#f87171',
+                        amberWarn: '#fbbf24',
                     },
                     fontFamily: {
                         sans: ['Inter', 'system-ui', 'PingFang SC', 'Microsoft YaHei', 'sans-serif'],
                     },
+                    animation: {
+                        'pulse-slow': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'typewriter': 'blink 0.8s step-end infinite',
+                        'slide-in': 'slideIn 0.25s ease-out',
+                        'slide-in-right': 'slideInRight 0.3s ease-out',
+                        'slide-out-right': 'slideOutRight 0.3s ease-in',
+                    },
+                    keyframes: {
+                        blink: {
+                            '0%, 100%': { opacity: '1' },
+                            '50%': { opacity: '0' },
+                        },
+                        slideIn: {
+                            '0%': { opacity: '0', transform: 'translateX(-8px)' },
+                            '100%': { opacity: '1', transform: 'translateX(0)' },
+                        },
+                        slideInRight: {
+                            '0%': { opacity: '0', transform: 'translateX(-100%)' },
+                            '100%': { opacity: '1', transform: 'translateX(0)' },
+                        },
+                        slideOutRight: {
+                            '0%': { opacity: '1', transform: 'translateX(0)' },
+                            '100%': { opacity: '0', transform: 'translateX(-100%)' },
+                        }
+                    }
                 }
             }
         }
@@ -41,120 +69,232 @@
         body { overflow: hidden; }
         .chat-area::-webkit-scrollbar { width: 3px; }
         .chat-area::-webkit-scrollbar-thumb { background: #444; border-radius: 10px; }
+        .sidebar::-webkit-scrollbar { width: 4px; }
+        .sidebar::-webkit-scrollbar-thumb { background: #555; border-radius: 10px; }
         textarea { field-sizing: content; }
+        .stream-text { white-space: pre-wrap; word-break: break-word; }
+        .toggle-checkbox:checked { right: 0; }
+        .toggle-checkbox:checked + .toggle-bg { background-color: rgba(242,160,181,0.6); }
     </style>
 </head>
 
 <body class="bg-dark text-white h-screen w-screen font-sans">
 
-    <div class="flex flex-col h-full w-full">
+    <div class="flex h-full w-full">
 
-        <!-- 顶部栏 -->
-        <header class="flex items-center justify-between px-6 py-4 border-b border-white/5 flex-shrink-0">
-            <div class="flex items-center gap-3">
-                <div class="w-9 h-9 bg-pink/15 rounded-xl flex items-center justify-center text-lg">🌸</div>
-                <div>
-                    <span class="text-base font-semibold tracking-tight">Campus Compass</span>
-                    <span class="text-xs text-gray-500 ml-2">校园活动策划助手</span>
-                </div>
-            </div>
-            <div class="flex items-center gap-2">
-                <span class="text-xs text-gray-400 bg-pinkMuted px-3 py-1 rounded-full">AI 驱动</span>
-            </div>
-        </header>
-
-        <!-- 聊天区 -->
-        <div class="chat-area flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-4" id="chatArea">
-            <!-- 欢迎区 -->
-            <div class="welcome-card flex flex-col items-center justify-center flex-1 py-16" id="welcomeCard">
-                <div class="flex items-center gap-3 mb-6">
-                    <div class="w-10 h-10 bg-pink/15 rounded-xl flex items-center justify-center text-2xl">🌸</div>
-                    <h1 class="text-2xl font-semibold tracking-tight">Campus Compass</h1>
-                </div>
-
-                <p class="text-gray-400 text-sm mb-6 text-center max-w-md">
-                    智能活动策划助手<br>
-                    输入活动主题 → 确认参与人数 → 一键生成完整方案<br>
-                    活动地点：<span class="text-pink font-semibold">E教学楼</span>
-                </p>
-
-                <div class="bg-darkCard border border-pink/10 rounded-2xl px-5 py-4 mb-8 max-w-md w-full text-left">
-                    <div class="flex items-center gap-2 mb-3">
-                        <span class="text-lg">📝</span>
-                        <span class="text-sm font-semibold text-gray-200">请提供您需要策划的活动主题</span>
+        <!-- 侧边栏 -->
+        <div id="sidebar"
+            class="hidden fixed left-0 top-0 h-full w-72 bg-darkCard border-r border-white/10 z-40 flex flex-col animate-slide-in-right">
+            <div class="p-4 border-b border-white/5">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 bg-pink/15 rounded-lg flex items-center justify-center">🌸</div>
+                        <span class="text-sm font-semibold">Campus Compass</span>
                     </div>
-                    <p class="text-xs text-gray-400 leading-relaxed">
-                        可以是简要关键词或详细描述，系统会自动判断是否需要扩展
-                    </p>
+                    <button onclick="toggleSidebar()" class="text-gray-400 hover:text-white transition-colors">
+                        <i class="fa fa-times"></i>
+                    </button>
                 </div>
 
-                <div class="grid grid-cols-4 gap-3 max-w-2xl w-full">
-                    <button onclick="sendQuick('科技创新活动')"
-                        class="flex flex-col items-center gap-2 p-4 bg-darkCard rounded-2xl border border-white/5 hover:border-pink/30 hover:bg-darkHover transition-all">
-                        <span class="text-2xl">🚀</span>
-                        <span class="text-sm font-medium">科技创新</span>
-                        <span class="text-xs text-gray-500">自动扩展</span>
-                    </button>
-                    <button onclick="sendQuick('电脑硬件知识分享会')"
-                        class="flex flex-col items-center gap-2 p-4 bg-darkCard rounded-2xl border border-white/5 hover:border-pink/30 hover:bg-darkHover transition-all">
-                        <span class="text-2xl">🎭</span>
-                        <span class="text-sm font-medium">硬件分享</span>
-                        <span class="text-xs text-gray-500">直接采用</span>
-                    </button>
-                    <button onclick="sendQuick('校园音乐节')"
-                        class="flex flex-col items-center gap-2 p-4 bg-darkCard rounded-2xl border border-white/5 hover:border-pink/30 hover:bg-darkHover transition-all">
-                        <span class="text-2xl">🎵</span>
-                        <span class="text-sm font-medium">校园音乐</span>
-                        <span class="text-xs text-gray-500">自动扩展</span>
-                    </button>
-                    <button onclick="sendQuick('大学生编程马拉松挑战赛')"
-                        class="flex flex-col items-center gap-2 p-4 bg-darkCard rounded-2xl border border-white/5 hover:border-pink/30 hover:bg-darkHover transition-all">
-                        <span class="text-2xl">🏆</span>
-                        <span class="text-sm font-medium">编程马拉松</span>
-                        <span class="text-xs text-gray-500">直接采用</span>
-                    </button>
-                    <button onclick="sendQuick('校园摄影展')"
-                        class="flex flex-col items-center gap-2 p-4 bg-darkCard rounded-2xl border border-white/5 hover:border-pink/30 hover:bg-darkHover transition-all">
-                        <span class="text-2xl">📷</span>
-                        <span class="text-sm font-medium">校园摄影展</span>
-                        <span class="text-xs text-gray-500">30人</span>
-                    </button>
+                <button onclick="createNewChat()"
+                    class="w-full py-2.5 bg-pink/15 border border-pink/30 text-pink text-sm font-medium rounded-xl hover:bg-pink/20 hover:border-pink/50 transition-all flex items-center justify-center gap-2">
+                    <i class="fa fa-plus"></i>
+                    新建对话
+                </button>
+            </div>
+
+            <div class="p-3 border-b border-white/5">
+                <div class="relative">
+                    <i
+                        class="fa fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-xs"></i>
+                    <input type="text" id="searchInput" placeholder="搜索历史对话..."
+                        class="w-full bg-darkInput border border-white/10 rounded-lg pl-9 pr-3 py-2 text-xs text-gray-200 outline-none focus:border-pink/40 transition-colors"
+                        oninput="searchChats()">
                 </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto sidebar p-3" id="chatList">
+                <!-- 历史对话列表将在这里渲染 -->
             </div>
         </div>
 
-        <!-- 输入区 -->
-        <div class="flex-shrink-0 px-6 pb-6">
-            <div class="max-w-3xl mx-auto">
-                <div class="bg-darkInput/80 rounded-3xl p-4 flex flex-col gap-3 border border-white/5">
-                    <textarea id="msgInput" placeholder="输入活动主题，如：科技创新活动 或 电脑硬件知识分享会..."
-                        class="w-full bg-transparent resize-none outline-none text-gray-200 placeholder-gray-500 text-sm min-h-[24px] max-h-32"
-                        rows="1" onkeydown="handleKeyDown(event)"></textarea>
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-2">
-                            <button class="btn-pink flex items-center gap-1">
-                                <i class="fa fa-cogs text-xs"></i>
-                                智能策划
-                            </button>
-                            <button class="btn-pink flex items-center gap-1">
-                                <i class="fa fa-map-marker text-xs"></i>
-                                教室导航
-                            </button>
+        <!-- 侧边栏遮罩 -->
+        <div id="sidebarOverlay" class="hidden fixed inset-0 bg-black/50 z-30" onclick="toggleSidebar()"></div>
+
+        <div class="flex flex-col h-full flex-1" id="mainContent">
+
+            <header class="flex items-center justify-between px-6 py-4 border-b border-white/5 flex-shrink-0">
+                <div class="flex items-center gap-3">
+                    <button onclick="toggleSidebar()"
+                        class="w-8 h-8 bg-darkHover/50 border border-white/10 rounded-lg flex items-center justify-center hover:border-pink/30 hover:bg-pinkMuted transition-all group"
+                        title="菜单">
+                        <i class="fa fa-bars text-gray-400 text-sm group-hover:text-pink transition-colors"></i>
+                    </button>
+                    <div class="flex items-center gap-2">
+                        <div class="w-9 h-9 bg-pink/15 rounded-xl flex items-center justify-center text-lg">🌸</div>
+                        <div>
+                            <span class="text-base font-semibold tracking-tight">Campus Compass</span>
+                            <span class="text-xs text-gray-500 ml-2">校园活动策划助手</span>
                         </div>
-                        <div class="flex items-center gap-3">
-                            <span class="text-gray-500 text-xs" id="wordCount">0</span>
-                            <button id="sendBtn"
-                                class="w-9 h-9 bg-pink/20 border border-pink/40 rounded-full flex items-center justify-center hover:bg-pink/30 transition-all disabled:opacity-30"
-                                onclick="sendMessage()">
-                                <i class="fa fa-arrow-up text-pink text-sm"></i>
-                            </button>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button id="proxyToggleBtn" onclick="toggleProxyPanel()"
+                        class="relative w-8 h-8 bg-darkHover/50 border border-white/10 rounded-lg flex items-center justify-center hover:border-pink/30 hover:bg-pinkMuted transition-all group"
+                        title="代理设置">
+                        <i class="fa fa-cog text-gray-400 text-sm group-hover:text-pink transition-colors"></i>
+                        <span id="proxyStatusDot"
+                            class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-dark bg-greenOk"></span>
+                    </button>
+                    <span class="text-xs text-gray-400 bg-pinkMuted px-3 py-1 rounded-full">AI 驱动 · 实时流式</span>
+                </div>
+            </header>
+
+            <div class="chat-area flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-4" id="chatArea">
+                <div class="welcome-card flex flex-col items-center justify-center flex-1 py-16" id="welcomeCard">
+                    <div class="flex items-center gap-3 mb-6">
+                        <div class="w-10 h-10 bg-pink/15 rounded-xl flex items-center justify-center text-2xl">🌸</div>
+                        <h1 class="text-2xl font-semibold tracking-tight">Campus Compass</h1>
+                    </div>
+
+                    <p class="text-gray-400 text-sm mb-6 text-center max-w-md">
+                        智能活动策划助手<br>
+                        输入活动主题 → 确认参与人数 → 实时流式生成完整方案<br>
+                        活动地点：<span class="text-pink font-semibold">E教学楼</span>
+                    </p>
+
+                    <div class="bg-darkCard border border-pink/10 rounded-2xl px-5 py-4 mb-8 max-w-md w-full text-left">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="text-lg">📝</span>
+                            <span class="text-sm font-semibold text-gray-200">请提供您需要策划的活动主题</span>
+                        </div>
+                        <p class="text-xs text-gray-400 leading-relaxed">
+                            可以是简要关键词或详细描述，系统会自动判断是否需要扩展
+                        </p>
+                    </div>
+
+                    <div class="grid grid-cols-4 gap-3 max-w-2xl w-full">
+                        <button onclick="sendQuick('科技创新活动')"
+                            class="flex flex-col items-center gap-2 p-4 bg-darkCard rounded-2xl border border-white/5 hover:border-pink/30 hover:bg-darkHover transition-all">
+                            <span class="text-2xl">🚀</span>
+                            <span class="text-sm font-medium">科技创新</span>
+                            <span class="text-xs text-gray-500">自动扩展</span>
+                        </button>
+                        <button onclick="sendQuick('电脑硬件知识分享会')"
+                            class="flex flex-col items-center gap-2 p-4 bg-darkCard rounded-2xl border border-white/5 hover:border-pink/30 hover:bg-darkHover transition-all">
+                            <span class="text-2xl">🎭</span>
+                            <span class="text-sm font-medium">硬件分享</span>
+                            <span class="text-xs text-gray-500">直接采用</span>
+                        </button>
+                        <button onclick="sendQuick('校园音乐节')"
+                            class="flex flex-col items-center gap-2 p-4 bg-darkCard rounded-2xl border border-white/5 hover:border-pink/30 hover:bg-darkHover transition-all">
+                            <span class="text-2xl">🎵</span>
+                            <span class="text-sm font-medium">校园音乐</span>
+                            <span class="text-xs text-gray-500">自动扩展</span>
+                        </button>
+                        <button onclick="sendQuick('大学生编程马拉松挑战赛')"
+                            class="flex flex-col items-center gap-2 p-4 bg-darkCard rounded-2xl border border-white/5 hover:border-pink/30 hover:bg-darkHover transition-all">
+                            <span class="text-2xl">🏆</span>
+                            <span class="text-sm font-medium">编程马拉松</span>
+                            <span class="text-xs text-gray-500">直接采用</span>
+                        </button>
+                        <button onclick="sendQuick('校园摄影展')"
+                            class="flex flex-col items-center gap-2 p-4 bg-darkCard rounded-2xl border border-white/5 hover:border-pink/30 hover:bg-darkHover transition-all">
+                            <span class="text-2xl">📷</span>
+                            <span class="text-sm font-medium">摄影展</span>
+                            <span class="text-xs text-gray-500">30人</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-shrink-0 px-6 pb-6">
+                <div class="max-w-3xl mx-auto">
+                    <div class="bg-darkInput/80 rounded-3xl p-4 flex flex-col gap-3 border border-white/5">
+                        <textarea id="msgInput" placeholder="输入活动主题，如：科技创新活动 或 电脑硬件知识分享会..."
+                            class="w-full bg-transparent resize-none outline-none text-gray-200 placeholder-gray-500 text-sm min-h-[24px] max-h-32"
+                            rows="1" onkeydown="handleKeyDown(event)"></textarea>
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <button class="btn-pink flex items-center gap-1">
+                                    <i class="fa fa-cogs text-xs"></i>
+                                    智能策划
+                                </button>
+                                <button class="btn-pink flex items-center gap-1">
+                                    <i class="fa fa-map-marker text-xs"></i>
+                                    教室导航
+                                </button>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="text-gray-500 text-xs" id="wordCount">0</span>
+                                <button id="sendBtn"
+                                    class="w-9 h-9 bg-pink/20 border border-pink/40 rounded-full flex items-center justify-center hover:bg-pink/30 transition-all disabled:opacity-30"
+                                    onclick="sendMessage()">
+                                    <i class="fa fa-arrow-up text-pink text-sm"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
+
         </div>
 
     </div>
+
+    <!-- 代理配置面板 -->
+    <div id="proxyPanel" class="hidden fixed top-16 right-6 z-50 animate-slide-in">
+        <div class="bg-darkCard border border-white/10 rounded-2xl p-5 w-80 shadow-2xl shadow-black/40">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-2">
+                    <i class="fa fa-shield text-pink text-sm"></i>
+                    <span class="text-sm font-semibold text-gray-200">代理设置</span>
+                </div>
+                <button onclick="toggleProxyPanel()" class="text-gray-500 hover:text-gray-300">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+
+            <!-- 启用/禁用开关 -->
+            <div class="flex items-center justify-between mb-4">
+                <span class="text-xs text-gray-400">启用代理</span>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="proxyEnabled" class="sr-only peer" onchange="onProxyToggle()">
+                    <div
+                        class="w-9 h-5 bg-darkHover rounded-full peer peer-checked:bg-pink/50 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all">
+                    </div>
+                </label>
+            </div>
+
+            <!-- 地址输入 -->
+            <div class="mb-3">
+                <label class="text-xs text-gray-400 block mb-1.5">代理地址</label>
+                <div class="flex gap-2">
+                    <input type="text" id="proxyAddress"
+                        class="flex-1 bg-darkInput border border-white/10 rounded-lg px-3 py-2 text-xs text-gray-200 outline-none focus:border-pink/40 transition-colors"
+                        placeholder="http://127.0.0.1:7897">
+                    <button onclick="testProxy()"
+                        class="px-3 py-2 bg-darkHover border border-white/10 rounded-lg text-xs text-gray-300 hover:border-pink/30 hover:text-pink transition-all"
+                        id="testProxyBtn">
+                        <span id="testProxyText">测试</span>
+                        <span id="testProxySpinner" class="hidden"><i class="fa fa-spinner fa-spin"></i></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 状态提示 -->
+            <div id="proxyMsg" class="text-xs mb-3 min-h-[20px] hidden"></div>
+
+            <!-- 保存按钮 -->
+            <button onclick="saveProxy()"
+                class="w-full py-2 bg-pink/15 border border-pink/30 text-pink text-xs rounded-lg hover:bg-pink/20 transition-all">
+                保存配置
+            </button>
+        </div>
+    </div>
+
+    <!-- 遮罩层 -->
+    <div id="proxyOverlay" class="hidden fixed inset-0 z-40" onclick="toggleProxyPanel()"></div>
 
     <script>
         const chatArea = document.getElementById("chatArea");
@@ -164,6 +304,139 @@
         let isLoading = false;
         let sessionId = "";
 
+        // ===== 代理配置 =====
+        let proxyEnabled = true;
+        let proxyAddress = "http://127.0.0.1:7897";
+        let proxyPanelOpen = false;
+
+        function loadProxyConfig() {
+            const saved = localStorage.getItem("campus_compass_proxy");
+            if (saved) {
+                try {
+                    const cfg = JSON.parse(saved);
+                    proxyEnabled = cfg.enabled !== false;
+                    proxyAddress = cfg.address || "http://127.0.0.1:7897";
+                } catch (e) { }
+            }
+            document.getElementById("proxyEnabled").checked = proxyEnabled;
+            document.getElementById("proxyAddress").value = proxyAddress;
+            updateProxyStatusDot();
+        }
+
+        function saveProxyToStorage() {
+            localStorage.setItem("campus_compass_proxy", JSON.stringify({
+                enabled: proxyEnabled,
+                address: proxyAddress,
+            }));
+        }
+
+        function updateProxyStatusDot() {
+            const dot = document.getElementById("proxyStatusDot");
+            if (proxyEnabled) {
+                dot.className = "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-dark bg-greenOk";
+            } else {
+                dot.className = "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-dark bg-amberWarn";
+            }
+        }
+
+        function onProxyToggle() {
+            proxyEnabled = document.getElementById("proxyEnabled").checked;
+            updateProxyStatusDot();
+            syncProxyToServer();
+        }
+
+        function syncProxyToServer() {
+            if (!sessionId) return;
+            fetch("/api/proxy", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    enabled: proxyEnabled,
+                    address: proxyAddress,
+                }),
+            }).catch(() => { });
+        }
+
+        function toggleProxyPanel() {
+            proxyPanelOpen = !proxyPanelOpen;
+            document.getElementById("proxyPanel").classList.toggle("hidden", !proxyPanelOpen);
+            document.getElementById("proxyOverlay").classList.toggle("hidden", !proxyPanelOpen);
+            if (proxyPanelOpen) {
+                document.getElementById("proxyAddress").focus();
+            }
+        }
+
+        function showProxyMsg(text, type) {
+            const el = document.getElementById("proxyMsg");
+            el.classList.remove("hidden");
+            const colors = {
+                success: "text-greenOk",
+                error: "text-redErr",
+                info: "text-gray-400",
+                warning: "text-amberWarn",
+            };
+            el.className = "text-xs mb-3 min-h-[20px] " + (colors[type] || "text-gray-400");
+            el.textContent = text;
+        }
+
+        async function testProxy() {
+            const address = document.getElementById("proxyAddress").value.trim();
+            if (!address) {
+                showProxyMsg("请输入代理地址", "error");
+                return;
+            }
+
+            const testBtn = document.getElementById("testProxyBtn");
+            const testText = document.getElementById("testProxyText");
+            const testSpinner = document.getElementById("testProxySpinner");
+            testBtn.disabled = true;
+            testText.classList.add("hidden");
+            testSpinner.classList.remove("hidden");
+            showProxyMsg("正在测试连接...", "info");
+
+            try {
+                const r = await fetch("/api/proxy/test", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ address }),
+                });
+                const d = await r.json();
+                if (d.success) {
+                    showProxyMsg("✅ " + d.message, "success");
+                } else {
+                    showProxyMsg("❌ " + d.message, "error");
+                }
+            } catch (e) {
+                showProxyMsg("❌ 网络请求失败", "error");
+            } finally {
+                testBtn.disabled = false;
+                testText.classList.remove("hidden");
+                testSpinner.classList.add("hidden");
+            }
+        }
+
+        function saveProxy() {
+            proxyAddress = document.getElementById("proxyAddress").value.trim();
+            if (!proxyAddress) {
+                showProxyMsg("请输入代理地址", "error");
+                return;
+            }
+            saveProxyToStorage();
+            syncProxyToServer();
+            showProxyMsg("✅ 配置已保存", "success");
+            setTimeout(() => toggleProxyPanel(), 800);
+        }
+
+        document.getElementById("proxyAddress").addEventListener("keydown", function (e) {
+            if (e.key === "Enter") {
+                saveProxy();
+            }
+        });
+
+        loadProxyConfig();
+
+        // ===== 聊天功能 =====
         msgInput.addEventListener("input", () => {
             msgInput.style.height = "auto";
             msgInput.style.height = Math.min(msgInput.scrollHeight, 128) + "px";
@@ -176,6 +449,293 @@
 
         function sendQuick(text) { msgInput.value = text; sessionId = ""; sendMessage(); }
 
+        function generatePlanNow() {
+            msgInput.value = "生成完整方案";
+            sendMessage();
+        }
+
+        // 侧边栏功能
+        let sidebarOpen = false;
+        let chats = [];
+        let currentChatId = null;
+        let messageCount = 0;
+
+        function toggleSidebar() {
+            sidebarOpen = !sidebarOpen;
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+
+            if (sidebarOpen) {
+                sidebar.classList.remove('hidden');
+                overlay.classList.remove('hidden');
+                loadChatList();
+            } else {
+                sidebar.classList.add('hidden');
+                overlay.classList.add('hidden');
+            }
+        }
+
+        function loadChatList() {
+            try {
+                const savedChats = localStorage.getItem('campusCompassChats');
+                if (savedChats) {
+                    const parsed = JSON.parse(savedChats);
+                    chats = Array.isArray(parsed) ? parsed : [];
+                } else {
+                    chats = [];
+                }
+            } catch (e) {
+                console.error('加载聊天历史失败:', e);
+                chats = [];
+            }
+            renderChatList(chats);
+        }
+
+        function renderChatList(chatList) {
+            const chatListEl = document.getElementById('chatList');
+            chatListEl.innerHTML = '';
+
+            if (chatList.length === 0) {
+                chatListEl.innerHTML = `
+                    <div class="text-center text-gray-500 text-xs py-8">
+                        <i class="fa fa-comment-o text-2xl mb-2 block"></i>
+                        暂无历史对话
+                    </div>
+                `;
+                return;
+            }
+
+            const sortedChats = [...chatList].sort((a, b) => {
+                try {
+                    return new Date(b.updatedAt) - new Date(a.updatedAt);
+                } catch {
+                    return 0;
+                }
+            });
+
+            sortedChats.forEach(chat => {
+                const chatDiv = document.createElement('div');
+                chatDiv.className = `mb-2 p-3 rounded-xl border border-white/5 hover:border-pink/20 hover:bg-pinkMuted/30 cursor-pointer transition-all ${currentChatId === chat.id ? 'bg-pinkMuted/50 border-pink/30' : ''}`;
+
+                chatDiv.onclick = () => loadChat(chat.id);
+
+                const title = chat.title || '新对话';
+                const preview = chat.preview || '';
+                let dateStr = '';
+                try {
+                    dateStr = formatDate(chat.updatedAt);
+                } catch {
+                    dateStr = '';
+                }
+
+                chatDiv.innerHTML = `
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-sm font-medium text-gray-200 truncate flex-1 mr-2">${escapeHtml(title)}</span>
+                        <button class="delete-btn text-gray-500 hover:text-red-400 transition-colors">
+                            <i class="fa fa-trash-o text-xs"></i>
+                        </button>
+                    </div>
+                    <p class="text-xs text-gray-500 truncate">${escapeHtml(preview)}</p>
+                    <p class="text-xs text-gray-600 mt-1">${escapeHtml(dateStr)}</p>
+                `;
+
+                const deleteBtn = chatDiv.querySelector('.delete-btn');
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    deleteChat(chat.id);
+                };
+
+                chatListEl.appendChild(chatDiv);
+            });
+        }
+
+        function createNewChat() {
+            const newChatId = 'chat_' + Date.now();
+            const newChat = {
+                id: newChatId,
+                title: '新对话',
+                preview: '',
+                messages: [],
+                sessionId: null,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+
+            chats.unshift(newChat);
+            saveChats();
+            loadChatIntoInterface(newChat);
+            toggleSidebar();
+        }
+
+        function loadChat(chatId) {
+            const chat = chats.find(c => c.id === chatId);
+            if (!chat) return;
+
+            loadChatIntoInterface(chat);
+            toggleSidebar();
+        }
+
+        function loadChatIntoInterface(chat) {
+            currentChatId = chat.id;
+            sessionId = chat.sessionId || '';
+            messageCount = chat.messages.length;
+
+            // 清空聊天区域
+            const chatArea = document.getElementById('chatArea');
+            const welcomeCard = document.getElementById('welcomeCard');
+            if (welcomeCard) welcomeCard.remove();
+
+            chatArea.innerHTML = '';
+
+            // 重新渲染消息
+            if (chat.messages.length > 0) {
+                chat.messages.forEach(msg => {
+                    if (msg.isUser) {
+                        addUserMsgDirect(msg.text);
+                    } else {
+                        addAiMsgDirect(msg.html);
+                    }
+                });
+            } else {
+                // 显示欢迎卡片
+                chatArea.innerHTML = `
+                    <div class="welcome-card flex flex-col items-center justify-center flex-1 py-16" id="welcomeCard">
+                        <div class="flex items-center gap-3 mb-6">
+                            <div class="w-10 h-10 bg-pink/15 rounded-xl flex items-center justify-center text-2xl">🌸</div>
+                            <h1 class="text-2xl font-semibold tracking-tight">Campus Compass</h1>
+                        </div>
+                        <p class="text-gray-400 text-sm mb-6 text-center max-w-md">
+                            智能活动策划助手<br>
+                            输入活动主题 → 确认参与人数 → 实时流式生成完整方案<br>
+                            活动地点：<span class="text-pink font-semibold">E教学楼</span>
+                        </p>
+                    </div>
+                `;
+            }
+
+            scrollToBottom();
+            renderChatList(chats);
+        }
+
+        function saveMessageToChat(isUser, text, html) {
+            if (!currentChatId) {
+                const newChatId = 'chat_' + Date.now();
+                const newChat = {
+                    id: newChatId,
+                    title: text.substring(0, 30) || '新对话',
+                    preview: text.substring(0, 50),
+                    messages: [],
+                    sessionId: null,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+                chats.unshift(newChat);
+                currentChatId = newChatId;
+            }
+
+            const chat = chats.find(c => c.id === currentChatId);
+            if (!chat) return;
+
+            chat.messages.push({
+                isUser,
+                text,
+                html,
+                timestamp: new Date().toISOString()
+            });
+
+            if (isUser && chat.title === '新对话') {
+                chat.title = text.substring(0, 30);
+            }
+
+            if (!isUser && text) {
+                chat.preview = text.substring(0, 50);
+            }
+
+            chat.updatedAt = new Date().toISOString();
+            if (sessionId) {
+                chat.sessionId = sessionId;
+            }
+
+            messageCount++;
+            saveChats();
+        }
+
+        function addUserMsgDirect(text) {
+            const div = document.createElement("div");
+            div.className = "flex justify-end";
+            div.innerHTML = `<div class="max-w-[70%] bg-pink/15 border border-pink/20 text-gray-100 px-5 py-3 rounded-2xl rounded-br-md text-sm leading-relaxed">${escapeHtml(text)}</div>`;
+            document.getElementById("chatArea").appendChild(div);
+        }
+
+        function addAiMsgDirect(html) {
+            const div = document.createElement("div");
+            div.className = "flex justify-start";
+            div.innerHTML = `<div class="max-w-[85%]">${html}</div>`;
+            document.getElementById("chatArea").appendChild(div);
+        }
+
+        function saveChats() {
+            localStorage.setItem('campusCompassChats', JSON.stringify(chats));
+        }
+
+        function deleteChat(chatId) {
+            if (!confirm('确定要删除这个对话吗？')) return;
+
+            chats = chats.filter(c => c.id !== chatId);
+            saveChats();
+
+            if (currentChatId === chatId) {
+                currentChatId = null;
+                sessionId = '';
+                // 重置界面
+                document.getElementById('chatArea').innerHTML = `
+                    <div class="welcome-card flex flex-col items-center justify-center flex-1 py-16" id="welcomeCard">
+                        <div class="flex items-center gap-3 mb-6">
+                            <div class="w-10 h-10 bg-pink/15 rounded-xl flex items-center justify-center text-2xl">🌸</div>
+                            <h1 class="text-2xl font-semibold tracking-tight">Campus Compass</h1>
+                        </div>
+                    </div>
+                `;
+            }
+
+            renderChatList(chats);
+        }
+
+        function searchChats() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            if (!query) {
+                renderChatList(chats);
+                return;
+            }
+
+            const filtered = chats.filter(chat =>
+                chat.title.toLowerCase().includes(query) ||
+                (chat.preview && chat.preview.toLowerCase().includes(query))
+            );
+            renderChatList(filtered);
+        }
+
+        function formatDate(dateStr) {
+            try {
+                if (!dateStr) return '';
+                const date = new Date(dateStr);
+                if (isNaN(date.getTime())) return '';
+
+                const now = new Date();
+                const diff = now - date;
+
+                if (diff < 0) return '';
+                if (diff < 60000) return '刚刚';
+                if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
+                if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
+                if (diff < 604800000) return Math.floor(diff / 86400000) + '天前';
+
+                return date.toLocaleDateString('zh-CN');
+            } catch (e) {
+                return '';
+            }
+        }
+
         function sendMessage() {
             const msg = msgInput.value.trim();
             if (!msg || isLoading) return;
@@ -186,6 +746,7 @@
             if (welcome) welcome.remove();
 
             addUserMsg(msg);
+            saveMessageToChat(true, msg, '');
             addLoadingMsg();
 
             fetch("/chat", {
@@ -196,11 +757,123 @@
                 .then(r => r.json())
                 .then(d => {
                     removeLoadingMsg();
-                    addAiMsg(d.reply);
-                    if (d.session_id) sessionId = d.session_id;
+                    if (d.session_id) {
+                        sessionId = d.session_id;
+                        syncProxyToServer();
+                    }
+
+                    if (d.stream) {
+                        startStreaming();
+                    } else if (d.stream_done) {
+                        isLoading = false; sendBtn.disabled = false; msgInput.focus();
+                    } else if (d.reply) {
+                        addAiMsg(d.reply);
+                        saveMessageToChat(false, '', d.reply);
+                        isLoading = false; sendBtn.disabled = false; msgInput.focus();
+                    }
                 })
-                .catch(() => { removeLoadingMsg(); addAiMsg('<div class="bg-red-900/20 border border-red-500/20 text-red-300 px-5 py-3 rounded-2xl text-sm">网络请求失败，请确认服务已启动</div>'); })
-                .finally(() => { isLoading = false; sendBtn.disabled = false; msgInput.focus(); });
+                .catch(() => {
+                    removeLoadingMsg();
+                    const errorHtml = '<div class="bg-red-900/20 border border-red-500/20 text-red-300 px-5 py-3 rounded-2xl text-sm">网络请求失败，请确认服务已启动</div>';
+                    addAiMsg(errorHtml);
+                    saveMessageToChat(false, '网络请求失败', errorHtml);
+                    isLoading = false; sendBtn.disabled = false;
+                })
+        }
+
+        function startStreaming() {
+            const streamContainer = createStreamContainer();
+            const textArea = streamContainer.querySelector("#streamText");
+            const statusBadge = streamContainer.querySelector("#streamStatus");
+            let streamCompleted = false;
+            let finalHtml = '';
+            let fullText = '';
+
+            const eventSource = new EventSource(`/chat/stream?session_id=${sessionId}`);
+
+            eventSource.onmessage = function (event) {
+                try {
+                    const data = JSON.parse(event.data);
+
+                    if (data.type === "chunk") {
+                        fullText += data.text;
+                        textArea.textContent += data.text;
+                        scrollToBottom();
+                    } else if (data.type === "done") {
+                        streamCompleted = true;
+                        eventSource.close();
+                        finalHtml = data.html;
+                        statusBadge.innerHTML = '<i class="fa fa-check text-green-400 text-xs"></i><span class="text-green-400 text-xs">生成完成</span>';
+
+                        setTimeout(() => {
+                            streamContainer.outerHTML = `<div class="max-w-[85%]">${finalHtml}</div>`;
+                            saveMessageToChat(false, fullText, finalHtml);
+                            scrollToBottom();
+                            finishStreaming();
+                        }, 600);
+                    } else if (data.type === "error") {
+                        streamCompleted = true;
+                        eventSource.close();
+                        const errorText = `生成出错: ${data.message}`;
+                        textArea.innerHTML += `\n\n<span class="text-red-400">${errorText}</span>`;
+                        statusBadge.innerHTML = '<i class="fa fa-times text-red-400 text-xs"></i><span class="text-red-400 text-xs">生成失败</span>';
+                        const errorHtml = `<div class="bg-red-900/20 border border-red-500/20 text-red-300 px-5 py-3 rounded-2xl text-sm">${errorText}</div>`;
+                        saveMessageToChat(false, errorText, errorHtml);
+                        finishStreaming();
+                    }
+                } catch (e) {
+                    console.error("SSE parse error:", e);
+                }
+            };
+
+            eventSource.onerror = function () {
+                eventSource.close();
+                if (streamCompleted) return;
+                const errorText = '连接中断';
+                statusBadge.innerHTML = '<i class="fa fa-times text-red-400 text-xs"></i><span class="text-red-400 text-xs">连接中断</span>';
+                const errorHtml = `<div class="bg-red-900/20 border border-red-500/20 text-red-300 px-5 py-3 rounded-2xl text-sm">${errorText}</div>`;
+                saveMessageToChat(false, errorText, errorHtml);
+                finishStreaming();
+            };
+        }
+
+        function finishStreaming() {
+            fetch("/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: "_stream_done_", session_id: sessionId }),
+            }).finally(() => {
+                isLoading = false;
+                sendBtn.disabled = false;
+                msgInput.focus();
+            });
+        }
+
+        function createStreamContainer() {
+            const div = document.createElement("div");
+            div.className = "flex justify-start";
+            div.innerHTML = `
+                <div class="max-w-[85%] w-full">
+                    <div class="bg-darkCard border border-pink/20 rounded-2xl overflow-hidden">
+                        <div class="flex items-center justify-between px-5 py-3 border-b border-white/5 bg-pinkMuted/50">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">🤖</span>
+                                <span class="text-sm font-semibold text-gray-200">AI 正在生成活动方案</span>
+                            </div>
+                            <div id="streamStatus" class="flex items-center gap-1.5">
+                                <span class="flex w-2 h-2 rounded-full bg-pink animate-pulse-slow"></span>
+                                <span class="text-pink text-xs">实时生成中</span>
+                            </div>
+                        </div>
+                        <div class="px-5 py-4">
+                            <pre id="streamText" class="stream-text text-sm text-gray-300 font-mono leading-relaxed max-h-96 overflow-y-auto"></pre>
+                            <span class="inline-block w-1.5 h-4 bg-pink ml-0.5 animate-typewriter align-middle" id="streamCursor"></span>
+                        </div>
+                    </div>
+                </div>`;
+            chatArea.appendChild(div);
+            scrollToBottom();
+            return div;
         }
 
         function addUserMsg(text) {

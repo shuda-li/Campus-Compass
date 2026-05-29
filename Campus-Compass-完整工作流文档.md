@@ -991,59 +991,52 @@ graph TB
 
 ```mermaid
 sequenceDiagram
-    participant User as 用户
-    participant Loop as Agent Loop
+    actor User as 用户
+    participant AL as AgentLoop
     participant LLM as LLM API
     participant Tools as 工具分发
     participant Engine as 引擎层
     participant Data as 数据层
 
-    User->>Loop: run_agent("50人的技术讲座")
+    User->>AL: run_agent("50人的技术讲座")
 
-    Note over Loop: 初始化 AgentState + Trace
-    Loop->>Loop: 加载 System Prompt + 长期记忆
-    Loop->>Loop: messages = [system, user]
+    Note over AL: 初始化 AgentState + Trace
+    AL->>AL: 加载 System Prompt + 长期记忆
+    AL->>AL: messages = [system, user]
 
-    loop 最大 15 轮
-        Note over Loop: Turn N / 15
+    loop 最大15轮
+        Note over AL: Turn N / 15
 
-        Loop->>Loop: Nag检查(rounds_since_todo>=3)
-        Loop->>Loop: trim_to_budget(messages, 8000)
-        Loop->>LLM: chat(messages, TOOL_DEFINITIONS)
+        AL->>AL: Nag检查 + Token裁剪
+        AL->>LLM: chat(messages, TOOL_DEFINITIONS)
 
         alt LLM 调用失败
-            LLM-->>Loop: Exception
-            Note over Loop: break 跳出循环
+            LLM-->>AL: Exception
+            Note over AL: break 跳出循环
         else LLM 正常返回
-            LLM-->>Loop: choices: message + tool_calls
+            LLM-->>AL: choices: message + tool_calls
 
-            alt 无 tool_calls 且有未完成待办
-                Loop->>Loop: 注入工具调用要求
-                Note over Loop: 继续下一轮
-            else 无 tool_calls 且无待办
-                Note over Loop: 任务完成，break
+            alt 无tool_calls且有未完成待办
+                AL->>AL: 注入工具调用要求，继续循环
+            else 无tool_calls且无待办
+                Note over AL: 任务完成，break
             else 有 tool_calls
-                Loop->>Tools: dispatch_tool(tool_name, args, state)
+                AL->>Tools: dispatch_tool(name, args, state)
 
-                Note over Tools,Data: 根据工具名路由到对应模块
+                Note over Tools,Data: 按工具名路由到引擎层或数据层
 
-                Tools->>Engine: parse_intent / analyze_topic / generate_plan / rank_rooms
-                Tools->>Data: query_rooms / generate_navigation / estimate_budget
+                Tools->>Engine: 意图解析 / 主题分析 / 方案生成 / 教室评分
+                Tools->>Data: 教室查询 / 导航生成 / 预算计算
                 Engine-->>Tools: 结构化结果
                 Data-->>Tools: 数据查询结果
 
-                Tools-->>Loop: JSON 结果摘要
-                Loop->>Loop: 追加 tool_result 到 messages
-
-                opt 调用了 finalize
-                    Loop->>Loop: build_html + auto_remember
-                    Note over Loop: 返回 HTML，结束
-                end
+                Tools-->>AL: JSON 结果摘要
+                AL->>AL: 追加 tool_result 到 messages
             end
         end
     end
 
-    Loop-->>User: HTML 策划书
+    AL-->>User: HTML 策划书
 ```
 
 ### 14.3 Web 渐进式交互状态机

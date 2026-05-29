@@ -992,11 +992,11 @@ graph TB
 ```mermaid
 sequenceDiagram
     participant User as 用户
-    participant Loop as Agent Loop<br/>(agent_loop.py)
-    participant LLM as LLM API<br/>(DeepSeek/OpenAI)
-    participant Tools as 工具分发<br/>(registry.py)
-    participant Engine as 引擎层<br/>(engine/)
-    participant Data as 数据层<br/>(data/)
+    participant Loop as Agent Loop
+    participant LLM as LLM API
+    participant Tools as 工具分发
+    participant Engine as 引擎层
+    participant Data as 数据层
 
     User->>Loop: run_agent("50人的技术讲座")
 
@@ -1005,66 +1005,42 @@ sequenceDiagram
     Loop->>Loop: messages = [system, user]
 
     loop 最大 15 轮
-        Note over Loop: Turn N/15
+        Note over Loop: Turn N / 15
 
-        alt rounds_since_todo >= 3 且有待办
-            Loop->>Loop: 注入 Nag 提醒消息
-        end
-
+        Loop->>Loop: Nag检查(rounds_since_todo>=3)
         Loop->>Loop: trim_to_budget(messages, 8000)
         Loop->>LLM: chat(messages, TOOL_DEFINITIONS)
 
         alt LLM 调用失败
             LLM-->>Loop: Exception
-            Loop->>Loop: break 跳出循环
-        end
+            Note over Loop: break 跳出循环
+        else LLM 正常返回
+            LLM-->>Loop: choices: message + tool_calls
 
-        LLM-->>Loop: {choices: [{message: {content, tool_calls}}]}
-
-        alt 无 tool_calls
-            alt 有未完成待办
+            alt 无 tool_calls 且有未完成待办
                 Loop->>Loop: 注入工具调用要求
-                Note over Loop: 继续循环
-            else 无待办
-                Loop->>Loop: 任务完成，break
+                Note over Loop: 继续下一轮
+            else 无 tool_calls 且无待办
+                Note over Loop: 任务完成，break
+            else 有 tool_calls
+                Loop->>Tools: dispatch_tool(tool_name, args, state)
+
+                Note over Tools,Data: 根据工具名路由到对应模块
+
+                Tools->>Engine: parse_intent / analyze_topic / generate_plan / rank_rooms
+                Tools->>Data: query_rooms / generate_navigation / estimate_budget
+                Engine-->>Tools: 结构化结果
+                Data-->>Tools: 数据查询结果
+
+                Tools-->>Loop: JSON 结果摘要
+                Loop->>Loop: 追加 tool_result 到 messages
+
+                opt 调用了 finalize
+                    Loop->>Loop: build_html + auto_remember
+                    Note over Loop: 返回 HTML，结束
+                end
             end
         end
-
-        Loop->>Tools: 遍历 tool_calls，逐个 dispatch_tool(name, args, state)
-
-        alt parse_user_input
-            Tools->>Engine: parse_intent(user_input)
-            Engine-->>Tools: {activity_type, participants, building, ...}
-        else analyze_and_expand_topic
-            Tools->>Engine: analyze_topic(topic, llm_fn)
-            Engine-->>Tools: {is_simple, expanded, ...}
-        else generate_activity_plan
-            Tools->>Engine: generate_plan(topic, participants)
-            Engine-->>Tools: {activity_purpose, content[], materials[], ...}
-        else find_classrooms
-            Tools->>Data: query_rooms(capacity, building)
-            Data-->>Tools: [room1, room2, ...]
-        else score_classrooms
-            Tools->>Engine: rank_rooms(rooms, intent)
-            Engine-->>Tools: [sorted rooms]
-        else get_navigation
-            Tools->>Data: generate_navigation(top_room)
-            Data-->>Tools: "📍目标教室..."
-        else calculate_budget
-            Tools->>Data: estimate_budget(template, participants)
-            Data-->>Tools: {场地布置, 合计, ...}
-        else finalize
-            Tools->>Loop: build_html(plan, rooms, nav, budget)
-            Tools->>Loop: auto_remember(L3持久化)
-            Note over Loop: 返回 HTML，结束
-        end
-
-        Tools-->>Loop: JSON 结果摘要
-        Loop->>Loop: 追加 tool result 到 messages
-    end
-
-    alt 循环结束但未 finalize
-        Loop->>Loop: 自动 build_html + auto_remember
     end
 
     Loop-->>User: HTML 策划书

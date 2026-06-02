@@ -19,3 +19,7 @@ class AgentState:
     total_tokens_in: int = 0
     total_tokens_out: int = 0
     round_count: int = 0
+
+    # Skill 系统（P0-1：匹配到的活动策划技能）
+    matched_skill_name: str = ""
+    matched_skill: dict = field(default_factory=dict)

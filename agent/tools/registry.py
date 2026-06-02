@@ -239,13 +239,14 @@ def dispatch_tool(tool_name: str, arguments: dict, state) -> str:
             topic = state.expanded_topic or arguments.get("topic", state.raw_input)
             participants = arguments.get("participants", state.participants)
             state.participants = participants
+            skill = state.matched_skill if state.matched_skill else None
             llm_fn = None
             try:
-                llm_plan(topic, participants)
-                llm_fn = lambda t, p: llm_plan(t, p)
+                llm_plan(topic, participants, skill=skill)
+                llm_fn = lambda t, p: llm_plan(t, p, skill=skill)
             except Exception:
                 pass
-            state.plan = generate_plan(topic, participants, state.sorted_rooms, llm_fn)
+            state.plan = generate_plan(topic, participants, state.sorted_rooms, llm_fn, skill=skill)
             return json.dumps({
                 "ok": True,
                 "topic": state.plan.get("activity_topic", topic),

@@ -34,7 +34,7 @@ SKILL_TO_CATEGORY = {
 }
 
 
-def generate_plan(topic: str, participants: int, rooms: list, llm_call_fn=None) -> dict:
+def generate_plan(topic: str, participants: int, rooms: list, llm_call_fn=None, skill: dict = None) -> dict:
     if llm_call_fn:
         try:
             plan = llm_call_fn(topic, participants)
@@ -43,15 +43,15 @@ def generate_plan(topic: str, participants: int, rooms: list, llm_call_fn=None) 
         except Exception as e:
             print(f"[PlanGen] LLM首次调用失败: {e}")
 
-    return _reason_plan(topic, participants, rooms)
+    return _reason_plan(topic, participants, rooms, skill)
 
 
-def _reason_plan(topic: str, participants: int, rooms: list) -> dict:
+def _reason_plan(topic: str, participants: int, rooms: list, skill: dict = None) -> dict:
     try:
         from config import LLM_API_KEY
         if LLM_API_KEY:
             from agent.llm import complete
-            prompt = _build_simple_prompt(topic, participants)
+            prompt = _build_simple_prompt(topic, participants, skill)
             content = complete(prompt, system="你是校园活动策划专家，只输出JSON。", temperature=0.8, max_tokens=2000, timeout=25)
             if content:
                 plan = _parse_simple_response(content)
@@ -64,13 +64,48 @@ def _reason_plan(topic: str, participants: int, rooms: list) -> dict:
     return _ultimate_fallback(topic, participants)
 
 
-def _build_simple_prompt(topic: str, participants: int) -> str:
+def _build_simple_prompt(topic: str, participants: int, skill: dict = None) -> str:
+    # ── 技能指引部分（P0-1）──
+    skill_part = ""
+    if skill:
+        title = skill.get("title", "")
+        phases = skill.get("phases", [])
+        host_guides = skill.get("host_guides", {})
+        materials = skill.get("materials", [])
+        constraints = skill.get("constraints", {})
+
+        if any([phases, host_guides, materials, constraints]):
+            skill_part = f"\n===== 活动策划技能模板：{title} =====\n"
+
+            if phases:
+                skill_part += "\n参考流程（请在此基础上根据主题创新调整）：\n"
+                for p in phases:
+                    skill_part += f"  - {p.get('phase','')}（{p.get('duration','')}）: {p.get('content','')} [{p.get('interaction','')}]\n"
+
+            if host_guides:
+                skill_part += "\n参考引导语（请根据主题改写，不要照抄）：\n"
+                for key, val in host_guides.items():
+                    skill_part += f"  - {key}: {val}\n"
+
+            if materials:
+                skill_part += "\n参考物资清单（请根据主题调整）：\n"
+                for m in materials:
+                    skill_part += f"  - {m.get('name','')} ×{m.get('qty','')}（{m.get('spec','')}）\n"
+
+            if constraints:
+                skill_part += "\n约束条件：\n"
+                for key, val in constraints.items():
+                    skill_part += f"  - {key}: {val}\n"
+
+            skill_part += "===================================\n"
+
     return f'''为主题"{topic}"设计一个校园活动方案。
 
 参与人数: {participants}人
-
+{skill_part}
 你必须深入理解"{topic}"的含义，基于理解来设计活动，不要套万能模板。
 如果涉及专业知识（如MBTI/心理学/编程等），要体现该领域的特有概念。
+如果提供了技能模板，请参考其流程结构，但根据具体主题进行创新调整。
 
 输出JSON:
 {{
@@ -101,8 +136,63 @@ def _parse_simple_response(content: str) -> dict:
         return {}
 
 
-def _ultimate_fallback(topic: str, participants: int) -> dict:
+def _ultimate_fallback(topic: str, participants: int, skill: dict = None) -> dict:
     print("[PlanGen] 使用终极兜底模板")
+
+    # ── 优先使用 Skill 模板（P0-1）──
+    if skill and skill.get("phases"):
+        phases = skill["phases"]
+        host_guides = skill.get("host_guides", {})
+        materials = skill.get("materials", [])
+        activity_content = []
+        for p in phases:
+            phase_key = p.get("phase", "")
+            # 尝试匹配引导语
+            guide_key = None
+            if "签到" in phase_key:
+                guide_key = "签到"
+            elif "开幕" in phase_key or "开场" in phase_key or "致辞" in phase_key:
+                guide_key = "开幕" if "开幕" in host_guides else ("开场" if "开场" in host_guides else None)
+            elif "互动" in phase_key or "讨论" in phase_key:
+                guide_key = "互动环节" if "互动环节" in host_guides else None
+            elif "颁奖" in phase_key or "点评" in phase_key:
+                guide_key = "颁奖" if "颁奖" in host_guides else None
+            elif "闭幕" in phase_key or "总结" in phase_key or "合影" in phase_key:
+                guide_key = "闭幕" if "闭幕" in host_guides else ("结束" if "结束" in host_guides else None)
+            host_guide = host_guides.get(guide_key, "") if guide_key else ""
+
+            activity_content.append({
+                "phase": p.get("phase", ""),
+                "duration": p.get("duration", ""),
+                "content": p.get("content", ""),
+                "host_guide": host_guide,
+                "interaction": p.get("interaction", ""),
+            })
+
+        activity_materials = []
+        for m in materials:
+            activity_materials.append({
+                "name": m.get("name", ""),
+                "spec": m.get("spec", ""),
+                "qty": m.get("qty", ""),
+            })
+        if not activity_materials:
+            activity_materials = [
+                {"name": "签到表", "spec": "A4打印", "qty": "3张"},
+                {"name": "饮用水", "spec": "瓶装550ml", "qty": f"{int(participants * 1.2)}瓶"},
+            ]
+
+        return {
+            "activity_purpose": f'本次活动以"{topic}"为主题，旨在为同学们提供交流与学习的平台，通过精心设计的环节让参与者深入了解"{topic}"相关内容，激发兴趣、拓展视野。',
+            "activity_time": "待定",
+            "activity_topic": topic,
+            "organizer": "待定",
+            "host": "待定",
+            "activity_content": activity_content,
+            "activity_materials": activity_materials,
+        }
+
+    # ── 无 Skill 时的通用兜底 ──
     return {
         "activity_purpose": f'本次活动以"{topic}"为主题，旨在为同学们提供交流与学习的平台，通过精心设计的环节让参与者深入了解"{topic}"相关内容，激发兴趣、拓展视野。',
         "activity_time": "待定",
@@ -123,7 +213,7 @@ def _ultimate_fallback(topic: str, participants: int) -> dict:
     }
 
 
-def build_plan_prompt(topic: str, participants: int, search_knowledge: dict = None) -> str:
+def build_plan_prompt(topic: str, participants: int, search_knowledge: dict = None, skill: dict = None) -> str:
     knowledge_part = ""
     if search_knowledge and search_knowledge.get("available"):
         summary = search_knowledge.get("summary", "")
@@ -143,10 +233,39 @@ def build_plan_prompt(topic: str, participants: int, search_knowledge: dict = No
     except Exception:
         pass
 
+    # ── 技能指引部分（P0-1）──
+    skill_part = ""
+    if skill:
+        title = skill.get("title", "")
+        phases = skill.get("phases", [])
+        host_guides = skill.get("host_guides", {})
+        materials = skill.get("materials", [])
+        constraints = skill.get("constraints", {})
+
+        if any([phases, host_guides, materials, constraints]):
+            skill_part = f"\n===== 活动策划技能模板：{title} =====\n"
+            if phases:
+                skill_part += "\n参考流程（请在此基础上根据主题创新调整）：\n"
+                for p in phases:
+                    skill_part += f"  - {p.get('phase','')}（{p.get('duration','')}）: {p.get('content','')} [{p.get('interaction','')}]\n"
+            if host_guides:
+                skill_part += "\n参考引导语（请根据主题改写，不要照抄）：\n"
+                for key, val in host_guides.items():
+                    skill_part += f"  - {key}: {val}\n"
+            if materials:
+                skill_part += "\n参考物资清单（请根据主题调整）：\n"
+                for m in materials:
+                    skill_part += f"  - {m.get('name','')} ×{m.get('qty','')}（{m.get('spec','')}）\n"
+            if constraints:
+                skill_part += "\n约束条件：\n"
+                for key, val in constraints.items():
+                    skill_part += f"  - {key}: {val}\n"
+            skill_part += "===================================\n"
+
     return f'''你是一个有创意的校园活动策划师。请为主题"{topic}"设计一个独特、有趣、可执行的活动方案。
 
 参与人数: {participants}人
-{knowledge_part}{memory_part}
+{knowledge_part}{memory_part}{skill_part}
 核心原则:
 1. 深入理解"{topic}"的真正含义——如果它涉及专业知识（如MBTI人格理论、编程技术、心理学等），你必须展现对该领域的理解
 2. 活动目的要写出"{topic}"这个主题的独特价值，不要写"搭建平台""促进交流"这种万能套话

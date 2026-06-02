@@ -414,6 +414,8 @@ def chat_stream():
 
 
 if __name__ == "__main__":
+    # Windows 终端默认 GBK 编码不支持 emoji，强制 UTF-8
+    sys.stdout.reconfigure(encoding='utf-8')
     print("=" * 50)
     print("  🎓 Campus Compass 校园活动策划助手")
     print("  🧠 主题智能处理 + 结构化方案生成")

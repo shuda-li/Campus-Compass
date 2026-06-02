@@ -305,8 +305,8 @@
         let sessionId = "";
 
         // ===== 代理配置 =====
-        let proxyEnabled = true;
-        let proxyAddress = "http://127.0.0.1:7897";
+        let proxyEnabled = false;
+        let proxyAddress = "";
         let proxyPanelOpen = false;
 
         function loadProxyConfig() {
@@ -314,8 +314,8 @@
             if (saved) {
                 try {
                     const cfg = JSON.parse(saved);
-                    proxyEnabled = cfg.enabled !== false;
-                    proxyAddress = cfg.address || "http://127.0.0.1:7897";
+                    proxyEnabled = cfg.enabled !== undefined ? cfg.enabled : false;
+                    proxyAddress = cfg.address || "";
                 } catch (e) { }
             }
             document.getElementById("proxyEnabled").checked = proxyEnabled;

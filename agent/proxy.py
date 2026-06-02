@@ -2,7 +2,7 @@ import re
 import threading
 import os
 
-_default_proxy = os.environ.get('DEFAULT_PROXY', 'http://127.0.0.1:7897')
+_default_proxy = os.environ.get('DEFAULT_PROXY', '')
 
 _store = threading.local()
 

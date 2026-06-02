@@ -53,15 +53,15 @@ def _get_session(sid: str) -> dict:
             "topic": "",
             "expanded_topic": "",
             "participants": 0,
-            "proxy_enabled": True,
-            "proxy_address": "http://127.0.0.1:7897",
+            "proxy_enabled": False,
+            "proxy_address": "",
         }
     return sessions[sid]
 
 
 def _apply_proxy(state: dict):
     from agent.proxy import set_proxy
-    if state.get("proxy_enabled", True) and state.get("proxy_address"):
+    if state.get("proxy_enabled", False) and state.get("proxy_address"):
         set_proxy(state["proxy_address"])
     else:
         set_proxy(None)
@@ -155,12 +155,12 @@ def proxy_config():
         if sid and sid in sessions:
             state = sessions[sid]
             return jsonify({
-                "enabled": state.get("proxy_enabled", True),
-                "address": state.get("proxy_address", "http://127.0.0.1:7897"),
+                "enabled": state.get("proxy_enabled", False),
+                "address": state.get("proxy_address", ""),
             })
         return jsonify({
-            "enabled": True,
-            "address": "http://127.0.0.1:7897",
+            "enabled": False,
+            "address": "",
         })
 
     data = request.get_json() or {}

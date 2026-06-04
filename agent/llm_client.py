@@ -11,7 +11,9 @@ def call_llm_for_ideation(intent: dict) -> dict:
         return _fallback_ideation(intent)
 
     try:
-        response = requests.post(
+        session = requests.Session()
+        session.trust_env = False  # 绕过 Windows 系统代理
+        response = session.post(
             LLM_API_URL,
             headers={
                 "Authorization": f"Bearer {LLM_API_KEY}",

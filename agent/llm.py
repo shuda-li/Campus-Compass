@@ -2,10 +2,25 @@ import json
 import requests
 from config import LLM_API_KEY, LLM_API_URL, LLM_MODEL
 
+# ═══════════════════════════════════════════════════════════════
+# 共享 Session（连接复用 + 显式绕过系统代理）
+# ═══════════════════════════════════════════════════════════════
 
-def _get_proxies():
+def _build_session() -> requests.Session:
+    """创建绕过系统代理的 Session，代理由 Campus Compass 内部管理。"""
+    s = requests.Session()
+    s.trust_env = False  # ← 关键：忽略 Windows 系统代理
+    return s
+
+
+def _get_request_kwargs(timeout: int = 45) -> dict:
+    """构建 requests 调用的公共参数（代理 + 超时）。"""
     from agent.proxy import get_proxy
-    return get_proxy()
+    proxy = get_proxy()
+    kwargs = {"timeout": timeout}
+    if proxy:
+        kwargs["proxies"] = proxy
+    return kwargs
 
 
 def chat(messages: list, tools: list = None, temperature: float = 0.7, max_tokens: int = 1024, timeout: int = 45) -> dict:
@@ -20,12 +35,12 @@ def chat(messages: list, tools: list = None, temperature: float = 0.7, max_token
     if tools:
         payload["tools"] = tools
         payload["tool_choice"] = "auto"
-    response = requests.post(
+    session = _build_session()
+    response = session.post(
         LLM_API_URL,
         headers={"Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json"},
         json=payload,
-        timeout=timeout,
-        proxies=_get_proxies()
+        **_get_request_kwargs(timeout),
     )
     return response.json()
 
@@ -65,14 +80,21 @@ def stream_complete(prompt: str, system: str = "", temperature: float = 0.7, max
         "stream": True
     }
 
-    response = requests.post(
+    session = _build_session()
+    response = session.post(
         LLM_API_URL,
         headers={"Authorization": f"Bearer {LLM_API_KEY}", "Content-Type": "application/json"},
         json=payload,
-        timeout=timeout,
         stream=True,
-        proxies=_get_proxies()
+        **_get_request_kwargs(timeout),
     )
+
+    # 检查 HTTP 状态码（非 200 直接报错，不解析 SSE）
+    if response.status_code != 200:
+        error_msg = f"LLM API returned {response.status_code}: {response.text[:300]}"
+        print(f"[LLM] {error_msg}")
+        yield f"[Error: {error_msg}]"
+        return
 
     for line in response.iter_lines(decode_unicode=True):
         if not line or not line.startswith("data: "):
@@ -131,15 +153,18 @@ def stream_generate_plan(topic: str, participants: int, skill: dict = None):
 
     prompt = build_plan_prompt(topic, participants, search_knowledge, skill)
     full_text = ""
-    for chunk in stream_complete(
-        prompt,
-        system="你是校园活动策划专家。你的回答必须只包含JSON，不要有其他文字。",
-        temperature=0.8,
-        max_tokens=4000,
-        timeout=90
-    ):
-        full_text += chunk
-        yield {"type": "chunk", "text": chunk, "full": full_text}
+    try:
+        for chunk in stream_complete(
+            prompt,
+            system="你是校园活动策划专家。你的回答必须只包含JSON，不要有其他文字。",
+            temperature=0.8,
+            max_tokens=4000,
+            timeout=90
+        ):
+            full_text += chunk
+            yield {"type": "chunk", "text": chunk, "full": full_text}
+    except Exception as e:
+        print(f"[LLM] 流式调用失败: {e}")
 
     yield {"type": "done", "text": full_text}
 

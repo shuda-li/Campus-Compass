@@ -326,7 +326,13 @@ def call_llm_for_plan(topic: str, participants: int, api_key: str, api_url: str,
     import requests
     from agent.proxy import get_proxy
     prompt = build_plan_prompt(topic, participants, search_knowledge)
-    response = requests.post(
+    session = requests.Session()
+    session.trust_env = False  # 绕过 Windows 系统代理
+    kwargs = {"timeout": 25}
+    proxy = get_proxy()
+    if proxy:
+        kwargs["proxies"] = proxy
+    response = session.post(
         api_url,
         headers={
             "Authorization": f"Bearer {api_key}",
@@ -341,8 +347,7 @@ def call_llm_for_plan(topic: str, participants: int, api_key: str, api_url: str,
             "temperature": 0.8,
             "max_tokens": 4000,
         },
-        timeout=25,
-        proxies=get_proxy(),
+        **kwargs,
     )
     data = response.json()
     content = data["choices"][0]["message"]["content"]

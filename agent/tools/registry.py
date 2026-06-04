@@ -155,12 +155,12 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "dispatch_subagent",
-            "description": "派一个子代理在隔离上下文中执行专项任务。可用类型: classroom_scout（查教室）| budget_analyst（算预算）。子代理的完整对话会被丢弃，只返回最终摘要",
+            "description": "派一个 LLM 驱动的子代理在隔离上下文中执行专项任务。子代理有自己的 messages[]（完全隔离），使用白名单工具自主决策。可用类型: classroom_scout（查教室+评分+导航，会自动扩大搜索）| budget_analyst（算预算+分析+优化建议）。子代理的完整对话会被丢弃，只返回最终摘要。",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "agent_type": {"type": "string", "description": "子代理类型: classroom_scout 或 budget_analyst"},
-                    "prompt": {"type": "string", "description": "给子代理的任务描述"}
+                    "prompt": {"type": "string", "description": "给子代理的任务描述（建议包含：目标、范围、期望输出格式）"}
                 },
                 "required": ["agent_type", "prompt"]
             }

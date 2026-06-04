@@ -11,19 +11,21 @@ def set_proxy(address: str):
     if address:
         _store.proxies = {"http": address, "https": address}
     else:
-        _store.proxies = None
+        # 空字典 = 显式禁用代理（避免 requests 回退到系统代理）
+        _store.proxies = {}
 
 
 def get_proxy() -> dict:
-    if hasattr(_store, 'proxies') and _store.proxies is not None:
+    if hasattr(_store, 'proxies'):
         return _store.proxies
     if _default_proxy:
         return {"http": _default_proxy, "https": _default_proxy}
-    return None
+    # 返回空字典（而非 None）以显式禁用系统代理
+    return {}
 
 
 def clear_proxy():
-    _store.proxies = None
+    _store.proxies = {}
 
 
 def get_default() -> str:

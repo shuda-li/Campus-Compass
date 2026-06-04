@@ -75,10 +75,59 @@
         .stream-text { white-space: pre-wrap; word-break: break-word; }
         .toggle-checkbox:checked { right: 0; }
         .toggle-checkbox:checked + .toggle-bg { background-color: rgba(242,160,181,0.6); }
+
+        /* ═══════════════════════════════════════════════
+           白天模式（Day Mode）
+           ═══════════════════════════════════════════════ */
+        body.day-mode { background-color: #f0f2f5 !important; color: #1a1a2e !important; }
+        body.day-mode #mainContent { background-color: #f0f2f5; }
+        body.day-mode header { border-color: rgba(0,0,0,0.06) !important; background-color: #fff; }
+        body.day-mode .bg-darkCard { background-color: #ffffff !important; border-color: rgba(0,0,0,0.06) !important; }
+        body.day-mode .bg-darkInput\/80 { background-color: #ffffff !important; border-color: rgba(0,0,0,0.08) !important; }
+        body.day-mode .bg-darkInput { background-color: #f5f5f5 !important; border-color: rgba(0,0,0,0.06) !important; }
+        body.day-mode .bg-darkHover { background-color: #eaeaea !important; }
+        body.day-mode .bg-darkHover\/50 { background-color: rgba(0,0,0,0.04) !important; }
+        body.day-mode .text-gray-200 { color: #1a1a2e !important; }
+        body.day-mode .text-gray-300 { color: #333 !important; }
+        body.day-mode .text-gray-400 { color: #555 !important; }
+        body.day-mode .text-gray-500 { color: #777 !important; }
+        body.day-mode .text-white { color: #1a1a2e !important; }
+        body.day-mode .border-white\/5, body.day-mode .border-white\/10 { border-color: rgba(0,0,0,0.06) !important; }
+        body.day-mode .sidebar { border-color: rgba(0,0,0,0.08) !important; }
+        body.day-mode input, body.day-mode textarea { color: #1a1a2e !important; }
+        body.day-mode .placeholder-gray-500::placeholder { color: #999 !important; }
+        body.day-mode .bg-pinkMuted { background-color: rgba(242,160,181,0.1) !important; }
+        body.day-mode .bg-pink\/15 { background-color: rgba(242,160,181,0.12) !important; }
+        body.day-mode .chat-area::-webkit-scrollbar-thumb { background: #ccc; }
+        body.day-mode .sidebar::-webkit-scrollbar-thumb { background: #ccc; }
+
+        /* ═══════════════════════════════════════════════
+           自定义图片背景（75% 透明度）
+           ═══════════════════════════════════════════════ */
+        body.custom-bg { position: relative; }
+        body.custom-bg::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: var(--bg-image);
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            opacity: 0.75;
+            z-index: -1;
+            pointer-events: none;
+        }
+        /* 图片模式下给内容区加半透明底以保证可读性 */
+        body.custom-bg #mainContent {
+            background-color: rgba(18,18,18,0.85);
+        }
+        body.custom-bg.day-mode #mainContent {
+            background-color: rgba(240,242,245,0.88);
+        }
     </style>
 </head>
 
-<body class="bg-dark text-white h-screen w-screen font-sans">
+<body id="appBody" class="bg-dark text-white h-screen w-screen font-sans">
 
     <div class="flex h-full w-full">
 
@@ -139,6 +188,11 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-3">
+                    <button id="themeToggleBtn" onclick="toggleThemePanel()"
+                        class="relative w-8 h-8 bg-darkHover/50 border border-white/10 rounded-lg flex items-center justify-center hover:border-pink/30 hover:bg-pinkMuted transition-all group"
+                        title="主题设置">
+                        <i id="themeIcon" class="fa fa-moon-o text-gray-400 text-sm group-hover:text-pink transition-colors"></i>
+                    </button>
                     <button id="proxyToggleBtn" onclick="toggleProxyPanel()"
                         class="relative w-8 h-8 bg-darkHover/50 border border-white/10 rounded-lg flex items-center justify-center hover:border-pink/30 hover:bg-pinkMuted transition-all group"
                         title="代理设置">
@@ -210,30 +264,16 @@
 
             <div class="flex-shrink-0 px-6 pb-6">
                 <div class="max-w-3xl mx-auto">
-                    <div class="bg-darkInput/80 rounded-3xl p-4 flex flex-col gap-3 border border-white/5">
-                        <textarea id="msgInput" placeholder="输入活动主题，如：科技创新活动 或 电脑硬件知识分享会..."
-                            class="w-full bg-transparent resize-none outline-none text-gray-200 placeholder-gray-500 text-sm min-h-[24px] max-h-32"
+                    <div class="bg-darkInput/80 rounded-3xl py-2.5 px-4 flex items-center gap-2 border border-white/5">
+                        <textarea id="msgInput" placeholder="输入活动主题，每次围绕一个主题哦~"
+                            class="flex-1 bg-transparent resize-none outline-none text-gray-200 placeholder-gray-500 text-sm h-[38px] max-h-24 leading-9"
                             rows="1" onkeydown="handleKeyDown(event)"></textarea>
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-2">
-                                <button class="btn-pink flex items-center gap-1">
-                                    <i class="fa fa-cogs text-xs"></i>
-                                    智能策划
-                                </button>
-                                <button class="btn-pink flex items-center gap-1">
-                                    <i class="fa fa-map-marker text-xs"></i>
-                                    教室导航
-                                </button>
-                            </div>
-                            <div class="flex items-center gap-3">
-                                <span class="text-gray-500 text-xs" id="wordCount">0</span>
-                                <button id="sendBtn"
-                                    class="w-9 h-9 bg-pink/20 border border-pink/40 rounded-full flex items-center justify-center hover:bg-pink/30 transition-all disabled:opacity-30"
-                                    onclick="sendMessage()">
-                                    <i class="fa fa-arrow-up text-pink text-sm"></i>
-                                </button>
-                            </div>
-                        </div>
+                        <span class="text-gray-500 text-xs" id="wordCount">0</span>
+                        <button id="sendBtn"
+                            class="w-9 h-9 bg-pink/20 border border-pink/40 rounded-full flex items-center justify-center hover:bg-pink/30 transition-all disabled:opacity-30 flex-shrink-0"
+                            onclick="sendMessage()">
+                            <i class="fa fa-arrow-up text-pink text-sm"></i>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -295,6 +335,64 @@
 
     <!-- 遮罩层 -->
     <div id="proxyOverlay" class="hidden fixed inset-0 z-40" onclick="toggleProxyPanel()"></div>
+
+    <!-- 主题设置面板 -->
+    <div id="themePanel" class="hidden fixed top-16 right-6 z-50 animate-slide-in">
+        <div class="bg-darkCard border border-white/10 rounded-2xl p-5 w-80 shadow-2xl shadow-black/40">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-2">
+                    <i class="fa fa-paint-brush text-pink text-sm"></i>
+                    <span class="text-sm font-semibold text-gray-200">主题设置</span>
+                </div>
+                <button onclick="toggleThemePanel()" class="text-gray-500 hover:text-gray-300">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+
+            <!-- 白天/黑夜模式 -->
+            <div class="mb-4">
+                <span class="text-xs text-gray-400 block mb-2">显示模式</span>
+                <div class="flex gap-2">
+                    <button id="btnDayMode" onclick="setTheme('day')"
+                        class="flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all border
+                               bg-darkHover border-white/5 text-gray-400 hover:border-pink/30">
+                        ☀️ 白天
+                    </button>
+                    <button id="btnNightMode" onclick="setTheme('night')"
+                        class="flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all border
+                               bg-pink/15 border-pink/30 text-pink">
+                        🌙 黑夜
+                    </button>
+                </div>
+            </div>
+
+            <!-- 分隔线 -->
+            <div class="border-t border-white/5 my-4"></div>
+
+            <!-- 自定义背景图片 -->
+            <div class="mb-3">
+                <span class="text-xs text-gray-400 block mb-2">自定义背景图片</span>
+                <input type="file" id="bgImageInput" accept="image/*" class="hidden" onchange="handleBgImage(event)">
+                <div class="flex gap-2">
+                    <button onclick="document.getElementById('bgImageInput').click()"
+                        class="flex-1 py-2 px-3 bg-darkHover border border-white/10 rounded-lg text-xs text-gray-300 hover:border-pink/30 transition-all text-center">
+                        📁 选择本地图片
+                    </button>
+                    <button id="btnClearBg" onclick="clearBgImage()"
+                        class="py-2 px-3 bg-darkHover border border-white/10 rounded-lg text-xs text-gray-400 hover:border-red-400/30 hover:text-red-400 transition-all hidden">
+                        ✕ 清除
+                    </button>
+                </div>
+                <p id="bgImageName" class="text-xs text-gray-500 mt-2 hidden"></p>
+            </div>
+
+            <!-- 状态提示 -->
+            <div id="themeMsg" class="text-xs min-h-[20px] hidden"></div>
+        </div>
+    </div>
+
+    <!-- 主题面板遮罩 -->
+    <div id="themeOverlay" class="hidden fixed inset-0 z-40" onclick="toggleThemePanel()"></div>
 
     <script>
         const chatArea = document.getElementById("chatArea");
@@ -363,6 +461,8 @@
             document.getElementById("proxyPanel").classList.toggle("hidden", !proxyPanelOpen);
             document.getElementById("proxyOverlay").classList.toggle("hidden", !proxyPanelOpen);
             if (proxyPanelOpen) {
+                // 关闭主题面板（避免两个面板重叠）
+                if (themePanelOpen) toggleThemePanel();
                 document.getElementById("proxyAddress").focus();
             }
         }
@@ -435,6 +535,123 @@
         });
 
         loadProxyConfig();
+
+        // ===== 主题设置 =====
+        let currentTheme = 'night';       // 'night' | 'day'
+        let customBgImage = null;          // data URL or null
+        let themePanelOpen = false;
+
+        function loadTheme() {
+            const saved = localStorage.getItem('campus_compass_theme');
+            if (saved) {
+                try {
+                    const cfg = JSON.parse(saved);
+                    currentTheme = cfg.theme || 'night';
+                    customBgImage = cfg.bgImage || null;
+                } catch (e) { }
+            }
+            applyTheme();
+        }
+
+        function saveTheme() {
+            localStorage.setItem('campus_compass_theme', JSON.stringify({
+                theme: currentTheme,
+                bgImage: customBgImage,
+            }));
+        }
+
+        function applyTheme() {
+            const body = document.getElementById('appBody');
+            const btnDay = document.getElementById('btnDayMode');
+            const btnNight = document.getElementById('btnNightMode');
+            const themeIcon = document.getElementById('themeIcon');
+            const btnClear = document.getElementById('btnClearBg');
+            const bgName = document.getElementById('bgImageName');
+
+            // 白天/黑夜
+            if (currentTheme === 'day') {
+                body.classList.add('day-mode');
+                btnDay.className = 'flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all border bg-pink/15 border-pink/30 text-pink';
+                btnNight.className = 'flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all border bg-darkHover border-white/5 text-gray-400 hover:border-pink/30';
+                themeIcon.className = 'fa fa-sun-o text-pink text-sm';
+            } else {
+                body.classList.remove('day-mode');
+                btnNight.className = 'flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all border bg-pink/15 border-pink/30 text-pink';
+                btnDay.className = 'flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all border bg-darkHover border-white/5 text-gray-400 hover:border-pink/30';
+                themeIcon.className = 'fa fa-moon-o text-gray-400 text-sm';
+            }
+
+            // 自定义背景图片
+            if (customBgImage) {
+                body.classList.add('custom-bg');
+                body.style.setProperty('--bg-image', `url(${customBgImage})`);
+                btnClear.classList.remove('hidden');
+                bgName.classList.remove('hidden');
+                bgName.textContent = '已设置自定义背景';
+            } else {
+                body.classList.remove('custom-bg');
+                body.style.removeProperty('--bg-image');
+                btnClear.classList.add('hidden');
+                bgName.classList.add('hidden');
+            }
+        }
+
+        function setTheme(mode) {
+            currentTheme = mode;
+            applyTheme();
+            saveTheme();
+        }
+
+        function toggleThemePanel() {
+            themePanelOpen = !themePanelOpen;
+            document.getElementById('themePanel').classList.toggle('hidden', !themePanelOpen);
+            document.getElementById('themeOverlay').classList.toggle('hidden', !themePanelOpen);
+            // 关闭代理面板（避免两个面板重叠）
+            if (themePanelOpen && typeof proxyPanelOpen !== 'undefined' && proxyPanelOpen) {
+                toggleProxyPanel();
+            }
+        }
+
+        function handleBgImage(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (!file.type.startsWith('image/')) {
+                showThemeMsg('请选择图片文件', 'error');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                customBgImage = e.target.result;
+                applyTheme();
+                saveTheme();
+                showThemeMsg('✅ 背景图片已应用（透明度 75%）', 'success');
+            };
+            reader.onerror = function () {
+                showThemeMsg('图片读取失败，请重试', 'error');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function clearBgImage() {
+            customBgImage = null;
+            applyTheme();
+            saveTheme();
+            document.getElementById('bgImageInput').value = '';
+            showThemeMsg('已恢复默认背景', 'info');
+        }
+
+        function showThemeMsg(text, type) {
+            const el = document.getElementById('themeMsg');
+            el.classList.remove('hidden');
+            const colors = { success: 'text-greenOk', error: 'text-redErr', info: 'text-gray-400' };
+            el.className = 'text-xs min-h-[20px] ' + (colors[type] || 'text-gray-400');
+            el.textContent = text;
+            setTimeout(() => { el.classList.add('hidden'); }, 3000);
+        }
+
+        loadTheme();
 
         // ===== 聊天功能 =====
         msgInput.addEventListener("input", () => {
@@ -806,7 +1023,7 @@
                         statusBadge.innerHTML = '<i class="fa fa-check text-green-400 text-xs"></i><span class="text-green-400 text-xs">生成完成</span>';
 
                         setTimeout(() => {
-                            streamContainer.outerHTML = `<div class="max-w-[85%]">${finalHtml}</div>`;
+                            streamContainer.outerHTML = `<div class="max-w-[85%]">${finalHtml}<p class="text-xs text-gray-500 mt-3 ml-1">💡 请告诉我你的改进需求</p></div>`;
                             saveMessageToChat(false, fullText, finalHtml);
                             scrollToBottom();
                             finishStreaming();

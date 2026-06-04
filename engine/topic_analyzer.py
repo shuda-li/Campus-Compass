@@ -134,7 +134,9 @@ def parse_expansion_response(content: str) -> str:
 def expand_topic_via_llm(topic: str, api_key: str, api_url: str, model: str) -> str:
     import requests
     prompt = build_expansion_prompt(topic)
-    response = requests.post(
+    session = requests.Session()
+    session.trust_env = False  # 绕过 Windows 系统代理
+    response = session.post(
         api_url,
         headers={
             "Authorization": f"Bearer {api_key}",

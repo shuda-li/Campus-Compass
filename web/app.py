@@ -18,11 +18,167 @@ from engine.room_scorer import rank_rooms
 from tools.navigation import generate_navigation
 from agent.formatter import build_html
 from agent.llm import stream_generate_plan
+from agent.skill_loader import load_all_skills
+
+# 启动时初始化数据库（确保教室表存在）
+from data.init_db import init_database
+init_database()
+print("[Web] 数据库已初始化")
 
 app = Flask(__name__)
 
 SESSION_FILE = Path(__file__).parent.parent / ".memory" / "web_sessions.json"
 _lock = threading.Lock()
+
+
+# ── 单主题检测（同一对话不得切换主题）──
+
+def _detect_topic_switch(current_topic: str, new_input: str) -> bool:
+    """
+    检测用户输入是否疑似切换到新主题。
+
+    策略：
+    1. 纯数字/人数输入 → 不是主题切换
+    2. 简短的确认/补充用语 → 不是主题切换
+    3. 新输入中有「当前主题不存在」的技能专属关键词 → 疑似切换
+
+    核心逻辑：不是看"新输入匹配了哪个技能"，而是看"新输入中出现了
+    当前主题没有的异类关键词"。比如"篮球"对于"编程竞赛"就是异类关键词，
+    说明用户想切换到运动类活动。
+    """
+    if not current_topic or not new_input:
+        return False
+
+    # 纯数字或人数输入 → 不是新主题
+    if re.match(r'^\s*\d+\s*(人|位|名)?\s*$', new_input):
+        return False
+
+    # 简短的确认/补充用语 → 不是新主题
+    short_lower = new_input.strip().lower()
+    if short_lower in ['生成', '直接生成', '好了', '可以了', 'ok', '下一步', '跳过',
+                       '是的', '对', '好', '行', '嗯', '没错', '需要', '补充',
+                       '生成完整方案', '开始生成', 'go', 'yes', 'y']:
+        return False
+    if len(short_lower) <= 3:
+        return False
+
+    # ── 异类关键词检测 ──
+    try:
+        available = load_all_skills()
+
+        # 找出当前主题命中了哪些技能（及命中关键词）
+        current_skill_name = ""
+        current_kw_hits = set()
+        for name, skill in available.items():
+            kw_list = skill.get("keywords", [])
+            hits = {k for k in kw_list if k in current_topic}
+            if hits:
+                current_skill_name = name
+                current_kw_hits = hits
+                break  # 取第一个匹配的即可
+
+        if not current_skill_name:
+            # 当前主题无关键词命中 → 反向判断：新输入如果有活动关键词 → 可能是新主题
+            for name, skill in available.items():
+                kw_list = skill.get("keywords", [])
+                for kw in kw_list:
+                    if kw in new_input:
+                        return True
+            return False
+
+        # 统计新输入在当前技能 vs 其他技能中的关键词命中
+        current_skill_kw = available.get(current_skill_name, {}).get("keywords", [])
+        current_hit_count = sum(1 for k in current_skill_kw if k in new_input)
+        cross_alien_count = 0
+        for name, skill in available.items():
+            if name == current_skill_name:
+                continue
+            for kw in skill.get("keywords", []):
+                if kw in new_input and kw not in current_kw_hits:
+                    cross_alien_count += 1
+
+        # 判定规则：
+        # A) 跨技能异类词 ≥2 → 强烈信号（如 篮球+比赛 → 运动类）
+        # B) 跨技能异类词 ≥1 且当前技能命中 = 0 且异类词长度≥3 → 主题无关
+        #    （排除"分享""讨论"等短词误判；"摄影展"长度=3 可触发）
+        # C) 同技能内新关键词 ≥1 → Python→Java 类切换
+        if cross_alien_count >= 2:
+            return True
+        # 重新计算：只计长度≥3的异类词（避免"分享""讨论"等常见短词误判）
+        long_alien_count = 0
+        for name, skill in available.items():
+            if name == current_skill_name:
+                continue
+            for kw in skill.get("keywords", []):
+                if kw in new_input and kw not in current_kw_hits and len(kw) >= 3:
+                    long_alien_count += 1
+        if long_alien_count >= 1 and current_hit_count == 0:
+            return True
+
+        new_hits_in_same = [k for k in current_skill_kw if k in new_input]
+        alien_in_same = [k for k in new_hits_in_same if k not in current_kw_hits]
+        if len(alien_in_same) >= 1:
+            return True
+
+    except Exception:
+        pass
+
+    return False
+
+
+def _topic_switch_warning() -> str:
+    """新主题警告消息 HTML。"""
+    return '''<div class="bg-amber-900/20 border border-amber-500/30 rounded-2xl px-5 py-4">
+    <div class="flex items-center gap-2 mb-2">
+        <span class="text-lg">⚠️</span>
+        <span class="text-sm font-semibold text-amber-300">同一个对话多个主题可能会内容混淆！</span>
+    </div>
+    <p class="text-xs text-gray-400 leading-relaxed">
+        请围绕当前主题继续完善方案。如需策划新主题，请点击侧边栏 <span class="text-pink font-semibold">"＋ 新对话"</span> 创建全新的对话。
+    </p>
+</div>'''
+
+
+def _is_valid_topic(text: str) -> bool:
+    """校验主题是否有效（非空、非占位符、非系统指令）。"""
+    if not text or not text.strip():
+        return False
+    t = text.strip().lower()
+    # 系统占位符
+    if t in ['_stream_done_', '_placeholder_', 'undefined', 'null', 'none']:
+        return False
+    # 过短（单字不成主题）
+    if len(t) <= 1:
+        return False
+    return True
+
+
+def _invalid_topic_html() -> str:
+    """无效主题提示 HTML。"""
+    return '''<div class="bg-darkCard border border-pink/10 rounded-2xl px-5 py-4">
+    <div class="flex items-center gap-2 mb-3">
+        <span class="text-lg">📝</span>
+        <span class="text-sm font-semibold text-gray-200">请提供您需要策划的活动主题</span>
+    </div>
+    <p class="text-sm text-gray-300 leading-relaxed mb-2">
+        请输入有效的活动主题，我会帮您策划完整的活动方案。
+    </p>
+    <p class="text-xs text-gray-400">
+        例如：<span class="text-pink">"50人的Python编程竞赛"</span>、<span class="text-pink">"AI技术讲座"</span>、<span class="text-pink">"校园篮球比赛"</span>
+    </p>
+</div>'''
+
+
+def _review_hint_html(topic: str) -> str:
+    """方案已生成后的改进引导 HTML。"""
+    return f'''<div class="bg-darkCard border border-pink/10 rounded-2xl px-5 py-3 mt-3">
+    <p class="text-xs text-gray-400">
+        📋 当前主题：<span class="text-pink font-semibold">{topic}</span>
+    </p>
+    <p class="text-xs text-gray-500 mt-1">
+        💡 你可以输入改进需求来调整方案（如"换大一点的教室"、"增加互动环节"等）
+    </p>
+</div>'''
 
 
 def _load_sessions() -> dict:
@@ -60,11 +216,11 @@ def _get_session(sid: str) -> dict:
 
 
 def _apply_proxy(state: dict):
-    from agent.proxy import set_proxy
+    from agent.proxy import set_proxy, clear_proxy
     if state.get("proxy_enabled", False) and state.get("proxy_address"):
         set_proxy(state["proxy_address"])
     else:
-        set_proxy(None)
+        clear_proxy()
 
 
 def _save_to_memory(sid: str, topic: str, plan: dict, intent: dict, participants: int):
@@ -213,6 +369,14 @@ def chat():
     _apply_proxy(state)
 
     if state["step"] == "ask_topic":
+        # ── 主题有效性校验 ──
+        if not _is_valid_topic(user_msg):
+            return jsonify({
+                "reply": _invalid_topic_html(),
+                "success": True,
+                "session_id": sid,
+            })
+
         state["topic"] = user_msg
         state["step"] = "ask_participants"
         _save_sessions(sessions)
@@ -237,6 +401,14 @@ def chat():
             })
 
     if state["step"] == "ask_participants":
+        # ── 单主题检测：如果用户输入疑似新主题而非人数 → 警告 ──
+        if _detect_topic_switch(state.get("expanded_topic") or state["topic"], user_msg):
+            return jsonify({
+                "reply": _topic_switch_warning() + _ask_participants_html(state["expanded_topic"] or state["topic"], False),
+                "success": True,
+                "session_id": sid,
+            })
+
         participants = _extract_participants(user_msg)
         if participants == 0:
             participants = 30
@@ -269,6 +441,14 @@ def chat():
         return jsonify({"reply": reply, "success": True, "session_id": sid})
 
     if state["step"] == "ask_details":
+        # ── 单主题检测：如果用户输入疑似新主题 → 警告 ──
+        if _detect_topic_switch(state.get("expanded_topic") or state["topic"], user_msg):
+            return jsonify({
+                "reply": _topic_switch_warning(),
+                "success": True,
+                "session_id": sid,
+            })
+
         if any(kw in user_msg for kw in ["生成", "直接生成", "好了", "可以了", "ok", "OK", "下一步", "跳过"]):
             pass
         else:
@@ -306,34 +486,35 @@ def chat():
         })
 
     if state["step"] == "streaming":
-        state["step"] = "done"
+        state["step"] = "review"
         _save_sessions(sessions)
         return jsonify({"success": True, "session_id": sid, "stream_done": True})
 
-    if state["step"] == "done":
-        sessions.pop(sid, None)
+    if state["step"] == "review":
+        # _stream_done_ 是内部状态转换信号，直接忽略
+        if user_msg == "_stream_done_":
+            return jsonify({"success": True, "session_id": sid, "stream_done": True})
+
+        # ── 单主题检测：方案已生成，禁止切换主题 ──
+        if _detect_topic_switch(state.get("expanded_topic") or state["topic"], user_msg):
+            return jsonify({
+                "reply": _topic_switch_warning() + _review_hint_html(state["expanded_topic"] or state["topic"]),
+                "success": True,
+                "session_id": sid,
+            })
+
+        # 用户提供了改进反馈 → 回到 ask_details 状态，纳入补充信息
+        state["details"] = state.get("details", "") + "\n[改进需求] " + user_msg
+        state["step"] = "streaming"
         _save_sessions(sessions)
-        new_state = _get_session(sid)
-        new_state["topic"] = user_msg
-        has_llm = bool(LLM_API_KEY)
-        expand_fn = (lambda t: expand_topic_via_llm(t, LLM_API_KEY, LLM_API_URL, LLM_MODEL)) if has_llm else None
-        result = analyze_topic(user_msg, expand_fn)
-        if result["is_simple"] and result["expanded"]:
-            new_state["expanded_topic"] = result["expanded"]
-            new_state["step"] = "ask_participants"
-            return jsonify({
-                "reply": _topic_expand_notice(result["original"], result["expanded"]) + _ask_participants_html(result["expanded"], True),
-                "success": True,
-                "session_id": sid,
-            })
-        else:
-            new_state["expanded_topic"] = user_msg
-            new_state["step"] = "ask_participants"
-            return jsonify({
-                "reply": _ask_participants_html(user_msg, False),
-                "success": True,
-                "session_id": sid,
-            })
+
+        return jsonify({
+            "success": True,
+            "session_id": sid,
+            "stream": True,
+            "topic": state["expanded_topic"] or state["topic"],
+            "participants": state["participants"],
+        })
 
     return jsonify({"reply": "请提供活动主题~", "success": False, "session_id": sid})
 
@@ -357,22 +538,28 @@ def chat_stream():
         from agent.llm import stream_generate_plan
         from engine.plan_generator import _ultimate_fallback
 
-        full_text = ""
-        for event in stream_generate_plan(topic, participants):
-            if event["type"] == "chunk":
-                full_text = event["full"]
-                yield f"data: {json.dumps({'type': 'chunk', 'text': event['text']})}\n\n"
-            elif event["type"] == "done":
-                full_text = event["text"]
-                break
-
         try:
+            full_text = ""
+            for event in stream_generate_plan(topic, participants):
+                if event["type"] == "chunk":
+                    full_text = event["full"]
+                    yield f"data: {json.dumps({'type': 'chunk', 'text': event['text']})}\n\n"
+                elif event["type"] == "done":
+                    full_text = event["text"]
+                    break
+
             try:
                 plan = parse_plan_response(full_text)
             except Exception as parse_e:
                 print(f"[ChatStream] 解析LLM响应失败，使用兜底方案: {parse_e}")
                 plan = _ultimate_fallback(topic, participants)
-            
+        except Exception as stream_e:
+            # LLM 流式调用失败（网络/API 错误）→ 降级为兜底方案
+            print(f"[ChatStream] LLM流式调用失败，使用兜底方案: {stream_e}")
+            full_text = ""
+            plan = _ultimate_fallback(topic, participants)
+
+        try:
             rooms = query_rooms(capacity_min=participants, building="E教学楼")
             intent = {"building": "E教学楼", "equipment": [], "participants": participants}
             sorted_rooms = rank_rooms(rooms, intent) if rooms else []
@@ -381,26 +568,15 @@ def chat_stream():
             venue_html = _venue_recommend_html(sorted_rooms, participants)
             plan_html = build_html(plan, sorted_rooms, nav)
 
-            state["step"] = "done"
+            state["step"] = "review"
             _save_sessions(sessions)
 
             _save_to_memory(sid, topic, plan, intent, participants)
 
             yield f"data: {json.dumps({'type': 'done', 'html': venue_html + plan_html, 'plan': plan})}\n\n"
         except Exception as e:
-            print(f"[ChatStream] 发生错误: {e}")
-            # 即使出错，也尝试使用兜底方案生成内容
-            try:
-                plan = _ultimate_fallback(topic, participants)
-                rooms = query_rooms(capacity_min=participants, building="E教学楼")
-                intent = {"building": "E教学楼", "equipment": [], "participants": participants}
-                sorted_rooms = rank_rooms(rooms, intent) if rooms else []
-                nav = generate_navigation(sorted_rooms[0]) if sorted_rooms else []
-                venue_html = _venue_recommend_html(sorted_rooms, participants)
-                plan_html = build_html(plan, sorted_rooms, nav)
-                yield f"data: {json.dumps({'type': 'done', 'html': venue_html + plan_html, 'plan': plan})}\n\n"
-            except:
-                yield f"data: {json.dumps({'type': 'error', 'message': '生成方案时出错，请重试'})}\n\n"
+            print(f"[ChatStream] 后续处理错误: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'message': '方案生成后处理出错，请重试'})}\n\n"
 
     return Response(
         stream_with_context(generate()),

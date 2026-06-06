@@ -1,5 +1,6 @@
 import json
 import re
+from datetime import datetime
 from agent.skill_loader import match_skill, load_skill
 
 
@@ -64,7 +65,7 @@ def _reason_plan(topic: str, participants: int, rooms: list, skill: dict = None)
     return _ultimate_fallback(topic, participants)
 
 
-def _build_simple_prompt(topic: str, participants: int, skill: dict = None) -> str:
+def _build_simple_prompt(topic: str, participants: int, skill: dict = None, time_override: str = None) -> str:
     # ── 技能指引部分（P0-1）──
     skill_part = ""
     if skill:
@@ -99,19 +100,34 @@ def _build_simple_prompt(topic: str, participants: int, skill: dict = None) -> s
 
             skill_part += "===================================\n"
 
+    now = datetime.now()
+    now_str = now.strftime("%Y年%m月%d日 %H:%M")
+
+    time_override_part = ""
+    if time_override:
+        time_override_part = f"""
+===== 用户明确要求的时间 =====
+用户已明确指定活动时间必须为：{time_override}
+你必须严格遵守此时间，不要自行推断或修改！
+===============================
+"""
+
     return f'''为主题"{topic}"设计一个校园活动方案。
 
+当前时间: {now_str}
 参与人数: {participants}人
-{skill_part}
+{skill_part}{time_override_part}
 你必须深入理解"{topic}"的含义，基于理解来设计活动，不要套万能模板。
 如果涉及专业知识（如MBTI/心理学/编程等），要体现该领域的特有概念。
 如果提供了技能模板，请参考其流程结构，但根据具体主题进行创新调整。
+**活动时间不得早于当前时间（{now_str}）**
+{"**活动时间必须使用: " + time_override + "**" if time_override else ""}
 
 输出JSON:
 {{
     "activity_purpose": "活动目的（写清楚这个主题的独特价值，150-250字）",
     "activity_topic": "{topic}",
-    "activity_time": "建议时间",
+    "activity_time": "{"必须使用: " + time_override if time_override else "建议时间（必须晚于" + now_str + "）"}",
     "organizer": "主办单位建议",
     "host": "承办单位建议",
     "activity_content": [
@@ -213,7 +229,8 @@ def _ultimate_fallback(topic: str, participants: int, skill: dict = None) -> dic
     }
 
 
-def build_plan_prompt(topic: str, participants: int, search_knowledge: dict = None, skill: dict = None) -> str:
+def build_plan_prompt(topic: str, participants: int, search_knowledge: dict = None, skill: dict = None,
+                       active_intents: list = None, anchors: list = None, last_plan: dict = None) -> str:
     knowledge_part = ""
     if search_knowledge and search_knowledge.get("available"):
         summary = search_knowledge.get("summary", "")
@@ -262,22 +279,39 @@ def build_plan_prompt(topic: str, participants: int, search_knowledge: dict = No
                     skill_part += f"  - {key}: {val}\n"
             skill_part += "===================================\n"
 
+    now = datetime.now()
+    now_str = now.strftime("%Y年%m月%d日 %H:%M")
+
+    # ── 关键词锚定提示（从 plan_anchor 来，最精准）──
+    anchor_part = ""
+    if anchors and last_plan:
+        from engine.plan_anchor import format_anchor_hint
+        anchor_part = format_anchor_hint(anchors, last_plan)
+
+    # ── 用户修改意图提示（从 intent_detector 来）──
+    intent_part = ""
+    if active_intents:
+        from engine.intent_detector import apply_intents_to_prompt
+        intent_part = apply_intents_to_prompt(active_intents)
+
     return f'''你是一个有创意的校园活动策划师。请为主题"{topic}"设计一个独特、有趣、可执行的活动方案。
 
+当前时间: {now_str}
 参与人数: {participants}人
-{knowledge_part}{memory_part}{skill_part}
+{knowledge_part}{memory_part}{skill_part}{anchor_part}{intent_part}
 核心原则:
 1. 深入理解"{topic}"的真正含义——如果它涉及专业知识（如MBTI人格理论、编程技术、心理学等），你必须展现对该领域的理解
 2. 活动目的要写出"{topic}"这个主题的独特价值，不要写"搭建平台""促进交流"这种万能套话
 3. 活动环节根据主题特点灵活设计，每个环节的内容要具体实在，包含可操作细节
 4. 物资清单要真实贴合这个主题的实际需求
 5. 主持人引导语要自然口语化，贴合当前环节
+6. **活动时间不得早于当前时间（{now_str}）**
 
 输出JSON（只输出JSON，不要其他文字）:
 {{
     "activity_purpose": "写清楚这个主题的独特价值（200-300字）",
     "activity_topic": "{topic}",
-    "activity_time": "建议的活动时间",
+    "activity_time": "建议的活动时间（必须晚于{now_str}，格式如 2026年6月15日14:00-16:00）",
     "organizer": "建议主办单位",
     "host": "建议承办单位",
     "activity_content": [
@@ -291,35 +325,52 @@ def build_plan_prompt(topic: str, participants: int, search_knowledge: dict = No
 
 def parse_plan_response(content: str) -> dict:
     content = content.strip()
-    
-    # 清理 Markdown 代码块标记
-    if content.startswith("```"):
-        lines = content.split("\n")
-        content = "\n".join(lines[1:]) if len(lines) > 1 else content
-        if content.rstrip().endswith("```"):
-            content = content[: content.rfind("```")]
-    
+
+    # Clean markdown code fences: ```json ... ```
+    TRIPLE_BACKTICK = chr(96) + chr(96) + chr(96)
+    if content.startswith(TRIPLE_BACKTICK):
+        lines = content.split(chr(10))
+        content = chr(10).join(lines[1:]) if len(lines) > 1 else content
+        if content.rstrip().endswith(TRIPLE_BACKTICK):
+            content = content[: content.rstrip().rfind(TRIPLE_BACKTICK)]
+
     content = content.strip()
-    
-    # 尝试直接解析
+
+    # Extract JSON object between first { and last }
+    start_brace = content.find(chr(123))
+    end_brace = content.rfind(chr(125))
+    if start_brace != -1 and end_brace != -1 and end_brace > start_brace:
+        content = content[start_brace:end_brace + 1]
+
+    # Attempt 1: direct parse
     try:
         return json.loads(content)
     except json.JSONDecodeError as e:
-        print(f"[PlanGen] 直接解析失败: {e}")
-    
-    # 尝试找到 JSON 对象的开始和结束
+        print(f"[PlanGen] direct parse failed: {e}")
+
+    # Attempt 2: remove trailing commas (common LLM mistake)
     try:
-        # 找到第一个 { 和最后一个 }
-        start = content.find("{")
-        end = content.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            json_str = content[start:end+1]
-            return json.loads(json_str)
-    except Exception as e:
-        print(f"[PlanGen] 提取JSON后解析也失败: {e}")
-    
-    # 如果都失败了，尝试使用 _ultimate_fallback
-    raise ValueError("无法解析 LLM 返回的 JSON")
+        import re
+        fixed = re.sub(r',\s*}', '}', content)
+        fixed = re.sub(r',\s*]', ']', fixed)
+        return json.loads(fixed)
+    except json.JSONDecodeError as e:
+        print(f"[PlanGen] trailing comma fix failed: {e}")
+
+    # Attempt 3: replace smart/curly quotes with straight quotes
+    try:
+        fixed = content
+        fixed = fixed.replace(chr(0x201C), chr(34))  # LEFT DOUBLE QUOTATION -> "
+        fixed = fixed.replace(chr(0x201D), chr(34))  # RIGHT DOUBLE QUOTATION -> "
+        fixed = fixed.replace(chr(0x2018), chr(39))  # LEFT SINGLE QUOTATION -> '
+        fixed = fixed.replace(chr(0x2019), chr(39))  # RIGHT SINGLE QUOTATION -> '
+        fixed = fixed.replace(chr(0xFF02), chr(34))  # FULLWIDTH QUOTATION -> "
+        if fixed != content:
+            return json.loads(fixed)
+    except json.JSONDecodeError as e:
+        print(f"[PlanGen] smart quote fix failed: {e}")
+
+    raise ValueError("Cannot parse LLM JSON, content head: " + content[:100])
 
 
 def call_llm_for_plan(topic: str, participants: int, api_key: str, api_url: str, model: str, search_knowledge: dict = None) -> dict:

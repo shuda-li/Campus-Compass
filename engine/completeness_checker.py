@@ -52,6 +52,9 @@ QUESTION_TEMPLATES = [
 ]
 
 
+MAX_QUESTIONS = 3  # 最多问 3 个问题，之后自动结束
+
+
 def evaluate_completeness(state: AssessmentState) -> dict:
     """
     评估当前已收集信息的完整度，返回:
@@ -78,6 +81,11 @@ def evaluate_completeness(state: AssessmentState) -> dict:
 
     missing = [k for k, v in state.collected.items() if not v]
     all_complete = len(missing) == 0
+
+    # ── 退出机制：问够了就不再追问 ──
+    if not all_complete and len(state.asked_order) >= MAX_QUESTIONS:
+        all_complete = True
+        missing = []
 
     next_q = None
     if not all_complete:
@@ -113,9 +121,10 @@ def _pick_next_question(state: AssessmentState, missing: list) -> str:
 
 def _detect_time(text: str) -> bool:
     patterns = [
-        r"\d{1,2}月\d{1,2}日",       # 5月10日
-        r"\d{1,2}月\d{1,2}号",
-        r"\d{4}[-/]\d{1,2}[-/]\d{1,2}",  # 2026-05-10
+        r"\d{1,2}月\d{1,2}[日号]",     # 5月10日、5月10号
+        r"\d{1,2}年\d{1,2}月\d{1,2}[日号]",  # 27年5月1号
+        r"\d{2,4}年\d{1,2}月\d{1,2}[日号]",  # 2027年5月1号
+        r"\d{4}[-/]\d{1,2}[-/]\d{1,2}",      # 2026-05-10
         r"下?周[一二三四五六日天]",
         r"明天|后天|今天|下周|下个月",
     ]
@@ -183,22 +192,23 @@ def _build_summary(state: AssessmentState) -> str:
 
 def format_question_html(question: str, summary: str) -> str:
     """将问题格式化为好看的 HTML 气泡"""
-    return f'''<div class="bg-darkCard border border-pink/10 rounded-2xl px-5 py-4">
+    return f'''<div class="glass-panel rounded-2xl px-5 py-4">
     <div class="flex items-center gap-2 mb-3">
         <span class="text-lg">📋</span>
-        <span class="text-sm font-semibold text-gray-200">信息补全助手</span>
+        <span class="text-sm font-semibold text-starlight">信息补全助手</span>
     </div>
-    <p class="text-sm text-gray-300 leading-relaxed mb-3">{question}</p>
+    <p class="text-sm text-starlight leading-relaxed mb-3">{question}</p>
     <div class="flex items-center gap-2">
-        <span class="text-xs text-gray-500">📊 已收集进度:</span>
-        <span class="text-xs text-pink bg-pinkMuted px-2 py-0.5 rounded">{summary}</span>
+        <span class="text-xs text-stardust">📊 已收集进度:</span>
+        <span class="text-xs text-nebula bg-nebulaMuted px-2 py-0.5 rounded">{summary}</span>
     </div>
 </div>'''
 
 
 def format_complete_html(summary: str) -> str:
-    """当信息完整时，提示即将生成策划书"""
-    return f'''<div class="bg-pinkMuted border border-pink/20 rounded-2xl px-5 py-3">
-    <p class="text-sm text-pink font-semibold">✅ 信息收集完成！正在为你生成活动策划方案…</p>
-    <p class="text-xs text-gray-400 mt-1">已收集: {summary}</p>
+    """当信息完整或达到上限时，提示即将生成策划书"""
+    return f'''<div class="bg-nebulaMuted border border-nebula/25 rounded-2xl px-5 py-3">
+    <p class="text-sm text-nebula font-semibold">✅ 信息收集完成！正在为你生成活动策划方案…</p>
+    <p class="text-xs text-stardust mt-1">已收集: {summary}</p>
+    <p class="text-xs text-stardust mt-1">💡 方案生成后可在下方输入改进需求（如"换大教室"）进行调整</p>
 </div>'''

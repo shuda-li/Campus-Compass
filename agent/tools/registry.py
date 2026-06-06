@@ -161,6 +161,14 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "get_current_time",
+            "description": "获取当前日期和时间。必须在设置活动时间之前调用，确保活动时间不早于当前时间。",
+            "parameters": {"type": "object", "properties": {}, "required": []}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search_web",
             "description": "搜索互联网获取实时信息。可用于：了解活动主题的背景知识、查找类似活动案例、获取创意灵感。返回搜索结果摘要和链接",
             "parameters": {
@@ -330,6 +338,27 @@ def dispatch_tool(tool_name: str, arguments: dict, state) -> str:
                     "hint": "请先完成所有待办项（调 todowrite 更新状态）后再调 finalize",
                 }, ensure_ascii=False)
 
+            # ── 活动时间校验：不得早于当前时间 ──
+            if state.plan:
+                activity_time = state.plan.get("activity_time", "")
+                if activity_time and activity_time not in ("XXX", "待定", ""):
+                    try:
+                        from datetime import datetime
+                        import re
+                        # 提取时间中的日期部分
+                        date_match = re.search(r'(\d{4})[年/-](\d{1,2})[月/-](\d{1,2})', activity_time)
+                        if date_match:
+                            y, m, d = int(date_match.group(1)), int(date_match.group(2)), int(date_match.group(3))
+                            plan_date = datetime(y, m, d)
+                            if plan_date.date() < datetime.now().date():
+                                return json.dumps({
+                                    "ok": False,
+                                    "error": f"活动时间 {activity_time} 早于当前日期，请调 get_current_time 获取当前时间后重新设置",
+                                    "hint": "活动时间不得早于今天，请修改 activity_time 后重新调 finalize",
+                                }, ensure_ascii=False)
+                    except Exception:
+                        pass  # 解析失败不阻塞
+
             from agent.formatter import build_html
             from agent.memory.persistence import auto_remember
             state.html_output = build_html(state.plan, state.sorted_rooms, state.budget)
@@ -349,6 +378,16 @@ def dispatch_tool(tool_name: str, arguments: dict, state) -> str:
             agent_type = arguments.get("agent_type", "classroom_scout")
             prompt = arguments.get("prompt", "")
             return _truncate_result(run_subagent(agent_type, prompt, state), tool_name)
+
+        if tool_name == "get_current_time":
+            from datetime import datetime
+            now = datetime.now()
+            return json.dumps({
+                "ok": True,
+                "current_time": now.strftime("%Y年%m月%d日 %H:%M"),
+                "iso": now.isoformat(),
+                "hint": "活动时间必须晚于此时间",
+            }, ensure_ascii=False)
 
         if tool_name == "search_web":
             from agent.mcp.tavily_search import search_web

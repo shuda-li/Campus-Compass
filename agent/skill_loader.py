@@ -68,7 +68,49 @@ def match_skill(topic: str, available: dict = None) -> tuple:
                 best = "sports_planning"
         return best, available[best]
 
+    # ── 关键词无命中 → LLM 语义分类兜底 ──
+    fallback = _llm_classify(topic, available)
+    if fallback and fallback in available:
+        return fallback, available[fallback]
+
     return "lecture_planning", available.get("lecture_planning", {})
+
+
+def _llm_classify(topic: str, available: dict) -> str:
+    """用 LLM 判断主题属于哪种活动类型（关键词无命中时的兜底）。"""
+    try:
+        from config import LLM_API_KEY
+        if not LLM_API_KEY:
+            return ""
+
+        from agent.llm import complete
+
+        # 构建选项列表
+        options = []
+        for name, skill in available.items():
+            title = skill.get("title", name)
+            kw_sample = ", ".join(skill.get("keywords", [])[:5])
+            options.append(f"- {name}：{title}（如 {kw_sample}）")
+
+        prompt = f"""请判断以下活动主题属于哪种类型，只回复类型代码。
+
+活动主题：{topic}
+
+可选类型：
+{chr(10).join(options)}
+
+请只回复一个类型代码（如 lecture_planning、sports_planning 等），不要解释。"""
+
+        result = complete(prompt, system="你是活动分类助手。只回复类型代码。", temperature=0.1, max_tokens=30, timeout=10)
+        if result:
+            result = result.strip().lower()
+            # 清理可能的额外字符
+            for name in available:
+                if name in result:
+                    return name
+    except Exception as e:
+        print(f"[Skill] LLM分类失败: {e}")
+    return ""
 
 
 def _extract_section(text, pattern, group=1):

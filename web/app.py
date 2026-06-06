@@ -6,6 +6,13 @@ import json
 import threading
 from pathlib import Path
 
+# ── Windows 终端 UTF-8 乱码修复 ──
+# 强制 stdout/stderr 使用 UTF-8，避免中文输出在 GBK 终端下显示为乱码
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if sys.stderr.encoding != 'utf-8':
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context
@@ -56,8 +63,18 @@ def _detect_topic_switch(current_topic: str, new_input: str) -> bool:
     short_lower = new_input.strip().lower()
     if short_lower in ['生成', '直接生成', '好了', '可以了', 'ok', '下一步', '跳过',
                        '是的', '对', '好', '行', '嗯', '没错', '需要', '补充',
-                       '生成完整方案', '开始生成', 'go', 'yes', 'y']:
+                       '生成完整方案', '开始生成', 'go', 'yes', 'y','生成方案','走','继续']:
         return False
+
+    # 明确换题意向短语 → 直接判定为换题
+    if any(phrase in short_lower for phrase in [
+        '换个主题', '换个话题', '换一个主题', '换一个话题',
+        '重新开始', '新主题', '新话题', '新的活动',
+        '新建对话', '新对话', '换个活动',
+        '不聊这个', '换一个', '重来',
+    ]):
+        return True
+
     if len(short_lower) <= 3:
         return False
 
@@ -127,13 +144,13 @@ def _detect_topic_switch(current_topic: str, new_input: str) -> bool:
 
 def _topic_switch_warning() -> str:
     """新主题警告消息 HTML。"""
-    return '''<div class="bg-amber-900/20 border border-amber-500/30 rounded-2xl px-5 py-4">
+    return '''<div class="bg-amberMuted border border-amberWarn/30 rounded-2xl px-5 py-4">
     <div class="flex items-center gap-2 mb-2">
         <span class="text-lg">⚠️</span>
-        <span class="text-sm font-semibold text-amber-300">同一个对话多个主题可能会内容混淆！</span>
+        <span class="text-sm font-semibold text-amber">同一个对话多个主题可能会内容混淆！</span>
     </div>
-    <p class="text-xs text-gray-400 leading-relaxed">
-        请围绕当前主题继续完善方案。如需策划新主题，请点击侧边栏 <span class="text-pink font-semibold">"＋ 新对话"</span> 创建全新的对话。
+    <p class="text-xs text-stardust leading-relaxed">
+        请围绕当前主题继续完善方案。如需策划新主题，请点击侧边栏 <span class="text-nebula font-semibold">"＋ 新对话"</span> 创建全新的对话。
     </p>
 </div>'''
 
@@ -154,27 +171,27 @@ def _is_valid_topic(text: str) -> bool:
 
 def _invalid_topic_html() -> str:
     """无效主题提示 HTML。"""
-    return '''<div class="bg-darkCard border border-pink/10 rounded-2xl px-5 py-4">
+    return '''<div class="glass-panel rounded-2xl px-5 py-4">
     <div class="flex items-center gap-2 mb-3">
         <span class="text-lg">📝</span>
-        <span class="text-sm font-semibold text-gray-200">请提供您需要策划的活动主题</span>
+        <span class="text-sm font-semibold text-starlight">请提供您需要策划的活动主题</span>
     </div>
-    <p class="text-sm text-gray-300 leading-relaxed mb-2">
+    <p class="text-sm text-starlight leading-relaxed mb-2">
         请输入有效的活动主题，我会帮您策划完整的活动方案。
     </p>
-    <p class="text-xs text-gray-400">
-        例如：<span class="text-pink">"50人的Python编程竞赛"</span>、<span class="text-pink">"AI技术讲座"</span>、<span class="text-pink">"校园篮球比赛"</span>
+    <p class="text-xs text-stardust">
+        例如：<span class="text-nebula">"50人的Python编程竞赛"</span>、<span class="text-nebula">"AI技术讲座"</span>、<span class="text-nebula">"校园篮球比赛"</span>
     </p>
 </div>'''
 
 
 def _review_hint_html(topic: str) -> str:
     """方案已生成后的改进引导 HTML。"""
-    return f'''<div class="bg-darkCard border border-pink/10 rounded-2xl px-5 py-3 mt-3">
-    <p class="text-xs text-gray-400">
-        📋 当前主题：<span class="text-pink font-semibold">{topic}</span>
+    return f'''<div class="glass-panel rounded-2xl px-5 py-3 mt-3">
+    <p class="text-xs text-stardust">
+        📋 当前主题：<span class="text-nebula font-semibold">{topic}</span>
     </p>
-    <p class="text-xs text-gray-500 mt-1">
+    <p class="text-xs text-stardust mt-1">
         💡 你可以输入改进需求来调整方案（如"换大一点的教室"、"增加互动环节"等）
     </p>
 </div>'''
@@ -210,6 +227,7 @@ def _get_session(sid: str) -> dict:
             "participants": 0,
             "proxy_enabled": False,
             "proxy_address": "",
+            "temperature": 0.8,
         }
     return sessions[sid]
 
@@ -234,17 +252,17 @@ def _save_to_memory(sid: str, topic: str, plan: dict, intent: dict, participants
 
 
 def _ask_topic_html() -> str:
-    return '''<div class="bg-darkCard border border-pink/10 rounded-2xl px-5 py-4">
+    return '''<div class="glass-panel rounded-2xl px-5 py-4">
     <div class="flex items-center gap-2 mb-3">
         <span class="text-lg">📝</span>
-        <span class="text-sm font-semibold text-gray-200">请提供您需要策划的活动主题</span>
+        <span class="text-sm font-semibold text-starlight">请提供您需要策划的活动主题</span>
     </div>
-    <p class="text-sm text-gray-300 leading-relaxed mb-3">
+    <p class="text-sm text-starlight leading-relaxed mb-3">
         请描述您想举办的活动，可以是简要关键词或详细描述。<br>
-        例如：<span class="text-pink">"科技创新活动"</span>、<span class="text-pink">"电脑硬件知识分享会"</span>
+        例如：<span class="text-nebula">"科技创新活动"</span>、<span class="text-nebula">"电脑硬件知识分享会"</span>
     </p>
     <div class="flex items-center gap-2">
-        <span class="text-xs text-gray-500">💡 输入活动主题后按 Enter 发送</span>
+        <span class="text-xs text-stardust">💡 输入活动主题后按 Enter 发送</span>
     </div>
 </div>'''
 
@@ -252,35 +270,49 @@ def _ask_topic_html() -> str:
 def _ask_participants_html(topic: str, was_expanded: bool) -> str:
     hint = ""
     if was_expanded:
-        hint = f'<p class="text-xs text-pink mb-2">✨ 您的主题已扩展为：<strong>{topic}</strong></p>'
-    return f'''<div class="bg-darkCard border border-pink/10 rounded-2xl px-5 py-4">
+        hint = f'<p class="text-xs text-nebula mb-2">✨ 您的主题已扩展为：<strong>{topic}</strong></p>'
+    return f'''<div class="glass-panel rounded-2xl px-5 py-4">
     <div class="flex items-center gap-2 mb-3">
         <span class="text-lg">👥</span>
-        <span class="text-sm font-semibold text-gray-200">请问该活动预计参与人数大约是多少？</span>
+        <span class="text-sm font-semibold text-starlight">请问该活动预计参与人数大约是多少？</span>
     </div>
     {hint}
-    <p class="text-sm text-gray-300 leading-relaxed mb-3">
+    <p class="text-sm text-starlight leading-relaxed mb-3">
         请告诉我预计参与人数，我会据此推荐合适的教室规格。<br>
-        输入数字即可（如 <span class="text-pink font-semibold">50</span> 或 <span class="text-pink font-semibold">80人</span>）
+        输入数字即可（如 <span class="text-nebula font-semibold">50</span> 或 <span class="text-nebula font-semibold">80人</span>）
     </p>
     <div class="flex items-center gap-2">
-        <span class="text-xs text-gray-500">💡 输入人数后按 Enter</span>
+        <span class="text-xs text-stardust">💡 输入人数后按 Enter</span>
     </div>
 </div>'''
 
 
 def _topic_expand_notice(original: str, expanded: str) -> str:
-    return f'''<div class="bg-pinkMuted border border-pink/20 rounded-2xl px-5 py-3 mb-3">
-    <p class="text-xs text-pink font-semibold mb-1">🔍 检测到主题较简略，已自动扩展</p>
-    <p class="text-xs text-gray-400">"{original}" → <span class="text-pink">"{expanded}"</span></p>
+    return f'''<div class="bg-nebulaMuted border border-nebula/25 rounded-2xl px-5 py-3 mb-3">
+    <p class="text-xs text-nebula font-semibold mb-1">🔍 检测到主题较简略，已自动扩展</p>
+    <p class="text-xs text-stardust">"{original}" → <span class="text-nebula">"{expanded}"</span></p>
 </div>'''
 
 
 def _venue_recommend_html(rooms: list, participants: int) -> str:
     if not rooms:
-        return '<div class="bg-darkCard border border-amber-500/10 rounded-2xl px-5 py-3 mb-3"><p class=\"text-xs text-amber-400\">⚠️ 暂无可匹配教室</p></div>'
+        return '<div class="glass-panel border border-amberWarn/10 rounded-2xl px-5 py-3 mb-3"><p class=\"text-xs text-amberWarn\">⚠️ 暂无可匹配教室</p></div>'
+
+    def _room_type(r: dict) -> str:
+        """从 equipment 数组中提取教室类型。"""
+        equip = r.get("equipment", "[]")
+        if isinstance(equip, str):
+            try:
+                equip = json.loads(equip)
+            except Exception:
+                equip = []
+        for e in equip:
+            if "教室" in e or "法庭" in e:
+                return e
+        return ""
 
     top = rooms[0]
+    top_type = _room_type(top)
     fill_pct = f"{participants / top['capacity'] * 100:.0f}%"
     score = top.get("_score", 0)
     fill_s = top.get("_fill_score", 0)
@@ -294,29 +326,56 @@ def _venue_recommend_html(rooms: list, participants: int) -> str:
             break
         alt_fill = f"{participants / r['capacity'] * 100:.0f}%"
         alt_score = r.get("_score", 0)
-        alts += '<span class="text-xs text-gray-500">'
-        alts += f' · {r["room_id"]}（{r["capacity"]}人, 填充{alt_fill}, {alt_score:.0f}分）'
+        alt_type = _room_type(r)
+        alt_type_str = f" · {alt_type}" if alt_type else ""
+        alts += '<span class="text-xs text-stardust">'
+        alts += f' · {r["room_id"]}（{r["capacity"]}人, {alt_fill}{alt_type_str}, {alt_score:.0f}分）'
         alts += '</span>'
 
-    return f'''<div class="bg-darkCard border border-green-500/10 rounded-2xl px-5 py-3 mb-3">
+    type_badge = f'<span class="text-xs bg-nebula/10 text-nebula px-2 py-0.5 rounded-full ml-2">{top_type}</span>' if top_type else ''
+
+    return f'''<div class="glass-panel border border-greenOk/10 rounded-2xl px-5 py-3 mb-3">
     <div class="flex items-center gap-2 mb-2">
         <span class="text-lg">🏫</span>
-        <span class="text-sm font-semibold text-gray-200">场地推荐</span>
-        <span class="text-xs text-gray-500 ml-auto">填充率 50% + 距离 50%</span>
+        <span class="text-sm font-semibold text-starlight">场地推荐</span>
+        <span class="text-xs text-stardust ml-auto">填充率 50% + 距离 50%</span>
     </div>
-    <p class="text-xs text-gray-400">
-        推荐 <span class="text-pink font-semibold">{top.get("room_id","")}</span>（{top.get("capacity","")}人，填充{fill_pct}，总分{score:.0f}）
+    <p class="text-xs text-stardust">
+        推荐 <span class="text-nebula font-semibold">{top.get("room_id","")}</span>{type_badge}（{top.get("capacity","")}人，填充{fill_pct}，总分{score:.0f}）
     </p>
-    <p class="text-xs text-gray-500 mt-1">
+    <p class="text-xs text-stardust mt-1">
         填充分 {fill_s:.0f}/50 · 距离分 {dist_s:.0f}/50{alts}
     </p>
 </div>'''
 
 
 def _extract_participants(text: str) -> int:
-    m = re.search(r"(\d+)\s*(人|位|名)?", text)
+    """
+    从用户输入中提取参与人数。
+
+    规则（按优先级）：
+    1. 数字 + 人/位/名 → 明确人数，如 "30人"、"50位"
+    2. 单独数字且后面不跟日期单位 → 可能是人数，如 "30"、"50"
+    3. 数字 + 年/月/日/号/点/时/分 → 日期/时间，忽略，如 "27年"、"5月"、"1号"
+    """
+    # 规则1：明确带人数单位
+    m = re.search(r"(\d+)\s*(人|位|名)", text)
     if m:
         return int(m.group(1))
+
+    # 规则2+3：提取所有数字及其上下文，过滤日期
+    for m in re.finditer(r"(\d+)", text):
+        num = int(m.group(1))
+        if num > 500:  # 不可能的活动人数
+            continue
+        # 检查数字后紧跟的字符
+        after = text[m.end():m.end() + 2]
+        if after and after[0] in "年月日号点时秒分":
+            continue  # 日期/时间，跳过
+        if after and after[:2] in ["年", "月", "日"]:
+            continue
+        return num
+
     return 0
 
 
@@ -380,6 +439,7 @@ def api_history():
 def chat():
     data = request.get_json()
     user_msg = data.get("message", "").strip()
+    temperature = float(data.get("temperature", 0.8))
     if not user_msg:
         return jsonify({"reply": "请提供活动主题~", "success": False})
 
@@ -387,6 +447,8 @@ def chat():
     if not sid:
         sid = str(uuid.uuid4())[:8]
     state = _get_session(sid)
+    if temperature:
+        state["temperature"] = temperature
     _apply_proxy(state)
 
     if state["step"] == "ask_topic":
@@ -437,24 +499,24 @@ def chat():
         state["step"] = "ask_details"
         _save_sessions(sessions)
 
-        reply = f'''<div class="bg-darkCard border border-pink/10 rounded-2xl px-5 py-4">
+        reply = f'''<div class="glass-panel rounded-2xl px-5 py-4">
     <div class="flex items-center gap-2 mb-3">
         <span class="text-lg">📋</span>
-        <span class="text-sm font-semibold text-gray-200">确认活动信息</span>
+        <span class="text-sm font-semibold text-starlight">确认活动信息</span>
     </div>
-    <p class="text-sm text-gray-300 leading-relaxed mb-2">
-        主题：<span class="text-pink font-semibold">{state["expanded_topic"] or state["topic"]}</span><br>
-        人数：<span class="text-pink font-semibold">{participants}人</span>
+    <p class="text-sm text-starlight leading-relaxed mb-2">
+        主题：<span class="text-nebula font-semibold">{state["expanded_topic"] or state["topic"]}</span><br>
+        人数：<span class="text-nebula font-semibold">{participants}人</span>
     </p>
-    <p class="text-xs text-gray-400 mb-0">
+    <p class="text-xs text-stardust mb-0">
         如需补充活动时间、物资清单、人员分工等信息，请直接描述。<br>
-        例如：<span class="text-pink">"5月10日下午，需要投影仪和音响"</span>
+        例如：<span class="text-nebula">"5月10日下午，需要投影仪和音响"</span>
     </p>
-    <p class="text-xs text-gray-400">
+    <p class="text-xs text-stardust">
         如果不需要补充，请点击下方按钮：
     </p>
     <button onclick="generatePlanNow()"
-                        class="mt-3 w-full py-2.5 bg-pink/15 border border-pink/30 text-pink text-sm font-medium rounded-xl hover:bg-pink/20 hover:border-pink/50 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                        class="mt-3 w-full py-2.5 bg-nebulaMuted border border-nebula/30 text-nebula text-sm font-medium rounded-xl hover:bg-nebula/15 hover:border-nebula/40 hover:shadow-[0_0_12px_rgba(139,92,246,0.2)] active:scale-[0.98] transition-all flex items-center justify-center gap-2">
                         <i class="fa fa-magic"></i>
                         生成完整方案
                     </button>
@@ -516,13 +578,48 @@ def chat():
         if user_msg == "_stream_done_":
             return jsonify({"success": True, "session_id": sid, "stream_done": True})
 
-        # ── 单主题检测：方案已生成，禁止切换主题 ──
-        if _detect_topic_switch(state.get("expanded_topic") or state["topic"], user_msg):
-            return jsonify({
-                "reply": _topic_switch_warning() + _review_hint_html(state["expanded_topic"] or state["topic"]),
-                "success": True,
-                "session_id": sid,
-            })
+        # ── Phase 1: 关键词锚定（Plan-Aware）──
+        from engine.plan_anchor import anchor_feedback, derive_intent_from_anchors
+        last_plan = state.get("last_plan")
+        anchors = anchor_feedback(last_plan, user_msg) if last_plan else []
+        if anchors:
+            anchor_labels = [f"{a['keyword']}→{a['section']}[{a.get('index','')}].{a.get('field','')}" for a in anchors[:5]]
+            print(f"[Web] 关键词锚定: {', '.join(anchor_labels)}")
+            state["anchors"] = anchors
+            anchor_intents = derive_intent_from_anchors(anchors)
+        else:
+            anchor_intents = []
+            state["anchors"] = None
+
+        # ── Phase 2: 通用修改意图检测（时间/场地/人数/预算）──
+        from engine.intent_detector import detect_intent
+        general_intents = detect_intent(user_msg)
+
+        # 合并 intent：锚定优先，通用检测补充
+        merged_intents = anchor_intents.copy()
+        seen_types = {i["type"] for i in merged_intents}
+        for gi in general_intents:
+            if gi["type"] not in seen_types:
+                merged_intents.append(gi)
+                seen_types.add(gi["type"])
+
+        if merged_intents:
+            state["active_intents"] = merged_intents
+            labels = [f"{i['type']}={i['value']}" for i in merged_intents]
+            print(f"[Web] 合并修改意图: {', '.join(labels)}")
+        else:
+            state["active_intents"] = None
+
+        # ── 单主题检测：锚定和意图都失败时才触发 ──
+        # 有锚定 → 确认是改进反馈；有意图 → 可能是改进
+        # 两者都没有 → 疑似换题，警告
+        if not anchors and not merged_intents:
+            if _detect_topic_switch(state.get("expanded_topic") or state["topic"], user_msg):
+                return jsonify({
+                    "reply": _topic_switch_warning() + _review_hint_html(state["expanded_topic"] or state["topic"]),
+                    "success": True,
+                    "session_id": sid,
+                })
 
         # 用户提供了改进反馈 → 回到 ask_details 状态，纳入补充信息
         state["details"] = state.get("details", "") + "\n[改进需求] " + user_msg
@@ -554,6 +651,10 @@ def chat_stream():
 
     topic = state.get("expanded_topic") or state.get("topic", "")
     participants = state.get("participants", 30)
+    temperature = state.get("temperature", 0.8)
+    active_intents = state.get("active_intents")  # 用户修改意图列表
+    anchors = state.get("anchors")                 # 关键词锚定结果
+    last_plan = state.get("last_plan")             # 上次生成的 plan
 
     def generate():
         from agent.llm import stream_generate_plan
@@ -561,7 +662,9 @@ def chat_stream():
 
         try:
             full_text = ""
-            for event in stream_generate_plan(topic, participants):
+            for event in stream_generate_plan(topic, participants, temp=temperature,
+                                               active_intents=active_intents,
+                                               anchors=anchors, last_plan=last_plan):
                 if event["type"] == "chunk":
                     full_text = event["full"]
                     yield f"data: {json.dumps({'type': 'chunk', 'text': event['text']})}\n\n"
@@ -571,9 +674,19 @@ def chat_stream():
 
             try:
                 plan = parse_plan_response(full_text)
+                print(f"[ChatStream] Plan 解析成功, phases={len(plan.get('activity_content',[]))}, "
+                      f"materials={len(plan.get('activity_materials',[]))}, "
+                      f"purpose_len={len(plan.get('activity_purpose',''))}")
             except Exception as parse_e:
-                print(f"[ChatStream] 解析LLM响应失败，使用兜底方案: {parse_e}")
+                # 打印 full_text 的头尾各 200 字符，方便排查 LLM 输出了什么
+                head = full_text[:200] if full_text else "(empty)"
+                tail = full_text[-200:] if full_text and len(full_text) > 200 else ""
+                print(f"[ChatStream] 解析LLM响应失败: {parse_e}")
+                print(f"[ChatStream] full_text 头: {head}")
+                if tail:
+                    print(f"[ChatStream] full_text 尾: {tail}")
                 plan = _ultimate_fallback(topic, participants)
+                print(f"[ChatStream] 使用兜底方案, phases={len(plan.get('activity_content',[]))}")
         except Exception as stream_e:
             # LLM 流式调用失败（网络/API 错误）→ 降级为兜底方案
             print(f"[ChatStream] LLM流式调用失败，使用兜底方案: {stream_e}")
@@ -612,6 +725,8 @@ def chat_stream():
             venue_html = _venue_recommend_html(sorted_rooms, participants)
             plan_html = build_html(plan, sorted_rooms)
 
+            # ── 保存 plan 供后续关键词锚定 ──
+            state["last_plan"] = plan
             state["step"] = "review"
             _save_sessions(sessions)
 
@@ -631,6 +746,48 @@ def chat_stream():
             "Connection": "keep-alive",
         }
     )
+
+
+@app.route("/export/word")
+def export_word():
+    """导出活动方案为 Word 文档 (.docx)"""
+    sid = request.args.get("session_id", "")
+    if not sid or sid not in sessions:
+        return jsonify({"error": "会话未找到"}), 404
+
+    state = sessions[sid]
+    plan = state.get("last_plan")
+    if not plan:
+        return jsonify({"error": "尚未生成方案"}), 400
+
+    # 自动安装缺失的 python-docx
+    try:
+        from agent.word_export import export_plan_to_docx
+    except ImportError:
+        import subprocess as _sp
+        print("[Export] python-docx 未安装，正在自动安装...")
+        _sp.check_call([sys.executable, "-m", "pip", "install", "-q", "python-docx"])
+        from agent.word_export import export_plan_to_docx
+
+    try:
+        topic = plan.get("activity_topic", "活动方案")
+        # 文件名：去掉不安全字符
+        safe_topic = "".join(c for c in topic if c.isalnum() or c in (' ', '_', '-', '、'))
+        if not safe_topic.strip():
+            safe_topic = "活动方案"
+        filename = f"CampusCompass_{safe_topic[:20]}.docx"
+
+        filepath = export_plan_to_docx(plan)
+        from flask import send_file
+        return send_file(
+            filepath,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+    except Exception as e:
+        print(f"[Export] Word 导出失败: {e}")
+        return jsonify({"error": f"导出失败: {str(e)}"}), 500
 
 
 if __name__ == "__main__":

@@ -66,6 +66,8 @@ SYSTEM_PROMPT = """你是 Campus Compass 校园活动策划 Agent。你通过调
 6. calculate_budget — 计算预算
 7. finalize — 生成最终HTML
 
+**重要：设置活动时间前必须先调 get_current_time 获取当前时间，活动时间不得早于当前时间。**
+
 ## 行为规则
 
 - 不要猜测结果，调用工具获取真实数据

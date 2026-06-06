@@ -144,20 +144,22 @@ def generate_plan(topic: str, participants: int, skill: dict = None) -> dict:
     return {}
 
 
-def stream_generate_plan(topic: str, participants: int, skill: dict = None):
+def stream_generate_plan(topic: str, participants: int, skill: dict = None, temp: float = 0.8,
+                         active_intents: list = None, anchors: list = None, last_plan: dict = None):
     from engine.plan_generator import build_plan_prompt, _search_topic_knowledge
 
     search_knowledge = _search_topic_knowledge(topic)
     if search_knowledge.get("available"):
         print(f"[LLM] 已获取主题相关搜索知识")
 
-    prompt = build_plan_prompt(topic, participants, search_knowledge, skill)
+    prompt = build_plan_prompt(topic, participants, search_knowledge, skill,
+                               active_intents=active_intents, anchors=anchors, last_plan=last_plan)
     full_text = ""
     try:
         for chunk in stream_complete(
             prompt,
             system="你是校园活动策划专家。你的回答必须只包含JSON，不要有其他文字。",
-            temperature=0.8,
+            temperature=temp,
             max_tokens=4000,
             timeout=90
         ):

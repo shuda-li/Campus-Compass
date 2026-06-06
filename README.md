@@ -1,6 +1,6 @@
 # Campus Compass · 校园活动智能策划 Agent
 
-> 星穹铁道美学 ✦ DeepSeek 驱动 ✦ Plan-Aware 关键词锚定 ✦ 一键导出 Word
+> ✦ DeepSeek 驱动 ✦ Plan-Aware 关键词锚定 ✦ 一键导出 Word
 
 Campus Compass 是一个 LLM 驱动的校园活动策划 Agent，基于 **Agent / Skill / Harness 三层架构**，通过流式对话生成完整的活动方案——包含活动目的、环节设计、物资清单、教室推荐和预算计算。
 
@@ -8,7 +8,7 @@ Campus Compass 是一个 LLM 驱动的校园活动策划 Agent，基于 **Agent 
 
 ## 界面预览
 
-Star Rail 星穹铁道主题 UI：玻璃拟态面板、深空背景、星云紫 + 琥珀金配色、聚焦白光环。
+UI：玻璃拟态面板、深空背景、星云紫 + 琥珀金配色、聚焦白光环。
 
 ---
 

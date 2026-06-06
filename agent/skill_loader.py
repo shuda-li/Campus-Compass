@@ -61,6 +61,11 @@ def match_skill(topic: str, available: dict = None) -> tuple:
 
     if scores:
         best = max(scores, key=scores.get)
+        # 平局时：体育类优先（篮球、足球等是明确的体育信号）
+        if best != "sports_planning":
+            sport_score = scores.get("sports_planning", 0)
+            if sport_score > 0 and sport_score >= scores[best]:
+                best = "sports_planning"
         return best, available[best]
 
     return "lecture_planning", available.get("lecture_planning", {})

@@ -45,7 +45,6 @@ REGISTRY = {
 ## 你的能力
 - find_classrooms：按容量/建筑/设备查询可用教室
 - score_classrooms：多维评分排序（容量适配+楼层+设备+建筑偏好）
-- get_navigation：获取到推荐教室的步行导航
 
 ## 行为规则
 - 先用主 Agent 提供的人数+建筑+设备偏好做首次查询
@@ -55,7 +54,7 @@ REGISTRY = {
 
 ## 输出格式
 完成任务后，用纯文本简短总结你的发现，不要调用任何工具就直接回复。""",
-        tool_names=["find_classrooms", "score_classrooms", "get_navigation"],
+        tool_names=["find_classrooms", "score_classrooms"],
         max_turns=6,
     ),
     "budget_analyst": SubAgentSpec(
@@ -212,7 +211,6 @@ def _fallback_subagent(agent_type: str, prompt: str, state) -> str:
     if agent_type == "classroom_scout":
         from tools.db_service import query_rooms
         from engine.room_scorer import rank_rooms
-        from tools.navigation import generate_navigation
 
         participants = state.participants
         building = state.intent.get("building", "E教学楼") if state.intent else "E教学楼"
@@ -226,13 +224,11 @@ def _fallback_subagent(agent_type: str, prompt: str, state) -> str:
         intent_for_scoring = {"building": building, "equipment": state.intent.get("equipment", []) if state.intent else [], "participants": participants}
         sorted_rooms = rank_rooms(rooms, intent_for_scoring)
         top = sorted_rooms[0] if sorted_rooms else {}
-        nav = generate_navigation(top) if top else ""
 
         return json.dumps({
             "ok": True,
             "total": len(sorted_rooms),
-            "top_room": {"room_id": top.get("room_id"), "building": top.get("building"), "capacity": top.get("capacity")} if top else None,
-            "navigation_preview": nav[:200],
+            "top_room": {"room_id": top.get("room_id"), "building": top.get("building"), "floor": top.get("floor"), "capacity": top.get("capacity")} if top else None,
         }, ensure_ascii=False)
 
     elif agent_type == "budget_analyst":

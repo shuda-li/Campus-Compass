@@ -1,7 +1,7 @@
 import json
 
 
-def build_html(plan: dict, rooms: list = None, navigation: str = "", budget: dict = None) -> str:
+def build_html(plan: dict, rooms: list = None, budget: dict = None) -> str:
     topic = plan.get("activity_topic", plan.get("title", "活动策划书"))
     purpose = plan.get("activity_purpose", "")
     activity_time = plan.get("activity_time", "XXX")
@@ -118,14 +118,6 @@ def build_html(plan: dict, rooms: list = None, navigation: str = "", budget: dic
             parts.append(f'<span class="text-sm font-bold text-pink whitespace-nowrap">👥 {room.get("capacity","?")}人</span>')
             parts.append('</div>')
         parts.append('</div></div>')
-
-    if navigation:
-        parts.append('<div>')
-        parts.append('<div class="flex items-center gap-2 mb-3">')
-        parts.append('<span class="text-sm font-semibold text-gray-200">🧭 导航指引</span>')
-        parts.append('</div>')
-        parts.append(f'<div class="bg-pinkMuted border border-pink/10 rounded-xl px-4 py-3 text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{navigation}</div>')
-        parts.append('</div>')
 
     parts.append('</div></div>')
     return "\n".join(parts)

@@ -66,21 +66,22 @@ def rank_rooms(rooms: list, intent: dict, plan: dict = None) -> list:
     # ═══════════════════════════════════════════
     # 维度二：位置便利性（0~12 分）—— 次重要
     # ═══════════════════════════════════════════
-    def _location_score(floor: int) -> float:
+    def _location_score(room_id: str) -> float:
         """
-        低楼层 = 便于出入、搬运设备、紧急疏散。
-        细分更多档位以体现真实差异。
+        基于拓扑图的路径距离评分（替代旧版纯楼层评分）。
+
+        使用 data/map.json 中的走廊网络，BFS 计算从教室到正门（起点 C2）
+        的真实步行距离，然后映射到 0~12 分。
         """
-        if floor <= 1:
-            return 12.0   # 一楼，最方便
-        elif floor == 2:
-            return 9.0    # 二楼，走一层楼梯
-        elif floor == 3:
-            return 5.0    # 三楼，需要等电梯
-        elif floor == 4:
-            return 2.0    # 四楼及以上，不便利
-        else:
-            return 1.0
+        try:
+            from tools.topo_loader import get_distance_to_entrance, distance_to_score
+            dist = get_distance_to_entrance(room_id)
+            if dist is not None:
+                return distance_to_score(dist)
+        except Exception:
+            pass
+        # 回退：拓扑不可用时仍用楼层
+        return 12.0  # 所有教室都在 1F，默认满分
 
     # ═══════════════════════════════════════════
     # 维度三：设备匹配度（0~5 分）—— 降权
@@ -113,7 +114,7 @@ def rank_rooms(rooms: list, intent: dict, plan: dict = None) -> list:
     # ═══════════════════════════════════════════
     def score(room):
         capacity = room.get("capacity", 0)
-        floor = room.get("floor", 1)
+        room_id = room.get("room_id", "")
         building_name = room.get("building", "")
 
         # 解析设备列表
@@ -134,7 +135,7 @@ def rank_rooms(rooms: list, intent: dict, plan: dict = None) -> list:
 
         ratio = (capacity - participants) / participants
         total += _capacity_score(ratio)
-        total += _location_score(floor)
+        total += _location_score(room_id)
         total += _equipment_score(equip_list, needed_equipment)
         total += _building_score(building_name, preferred_building)
 

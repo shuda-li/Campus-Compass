@@ -14,8 +14,7 @@ from config import LLM_API_KEY, LLM_API_URL, LLM_MODEL
 from engine.topic_analyzer import analyze_topic, expand_topic_via_llm
 from engine.plan_generator import generate_plan, parse_plan_response
 from tools.db_service import query_rooms
-from engine.room_scorer import rank_rooms
-from tools.navigation import generate_navigation
+from engine.room_selector import select_best_rooms
 from agent.formatter import build_html
 from agent.llm import stream_generate_plan
 from agent.skill_loader import load_all_skills
@@ -225,7 +224,7 @@ def _apply_proxy(state: dict):
 
 def _save_to_memory(sid: str, topic: str, plan: dict, intent: dict, participants: int):
     try:
-        remember(sid, topic, intent, plan, {}, [], "")
+        remember(sid, topic, intent, plan, {}, [])
     except Exception as e:
         print(f"[Memory] L1/L2 save failed: {e}")
     try:
@@ -279,15 +278,37 @@ def _topic_expand_notice(original: str, expanded: str) -> str:
 
 def _venue_recommend_html(rooms: list, participants: int) -> str:
     if not rooms:
-        return ""
+        return '<div class="bg-darkCard border border-amber-500/10 rounded-2xl px-5 py-3 mb-3"><p class=\"text-xs text-amber-400\">⚠️ 暂无可匹配教室</p></div>'
+
     top = rooms[0]
+    fill_pct = f"{participants / top['capacity'] * 100:.0f}%"
+    score = top.get("_score", 0)
+    fill_s = top.get("_fill_score", 0)
+    dist_s = top.get("_distance_score", 0)
+    wdist = top.get("_weighted_dist", "?")
+
+    # 备选（第2、3名）
+    alts = ""
+    for i, r in enumerate(rooms[1:4]):
+        if i >= 2:
+            break
+        alt_fill = f"{participants / r['capacity'] * 100:.0f}%"
+        alt_score = r.get("_score", 0)
+        alts += '<span class="text-xs text-gray-500">'
+        alts += f' · {r["room_id"]}（{r["capacity"]}人, 填充{alt_fill}, {alt_score:.0f}分）'
+        alts += '</span>'
+
     return f'''<div class="bg-darkCard border border-green-500/10 rounded-2xl px-5 py-3 mb-3">
     <div class="flex items-center gap-2 mb-2">
         <span class="text-lg">🏫</span>
         <span class="text-sm font-semibold text-gray-200">场地推荐</span>
+        <span class="text-xs text-gray-500 ml-auto">填充率 50% + 距离 50%</span>
     </div>
     <p class="text-xs text-gray-400">
-        根据 {participants} 人规模，推荐 <span class="text-pink font-semibold">{top.get("room_id","")}</span>（{top.get("building","")} {top.get("floor","")}F，容纳 {top.get("capacity","")} 人）
+        推荐 <span class="text-pink font-semibold">{top.get("room_id","")}</span>（{top.get("capacity","")}人，填充{fill_pct}，总分{score:.0f}）
+    </p>
+    <p class="text-xs text-gray-500 mt-1">
+        填充分 {fill_s:.0f}/50 · 距离分 {dist_s:.0f}/50{alts}
     </p>
 </div>'''
 
@@ -560,13 +581,36 @@ def chat_stream():
             plan = _ultimate_fallback(topic, participants)
 
         try:
-            rooms = query_rooms(capacity_min=participants, building="E教学楼")
-            intent = {"building": "E教学楼", "equipment": [], "participants": participants}
-            sorted_rooms = rank_rooms(rooms, intent) if rooms else []
-            nav = generate_navigation(sorted_rooms[0]) if sorted_rooms else []
+            # 场地路由：电竞→机房区，体育→体育区，其他→E教学楼
+            try:
+                from agent.skill_loader import match_skill
+                skill_name, _ = match_skill(topic)
+                if skill_name == "sports_planning":
+                    topic_lower = topic.lower()
+                    if any(kw in topic_lower for kw in [
+                        "电竞", "电子竞技", "电竞赛", "游戏赛", "游戏竞技", "游戏竞赛",
+                        "网游", "端游", "手游", "主机游戏", "电竞联赛", "电竞挑战", "电竞杯",
+                        "lol", "英雄联盟", "dota", "csgo", "cs2", "王者荣耀", "吃鸡",
+                        "绝地求生", "pubg", "守望先锋", "overwatch", "炉石传说", "星际争霸",
+                        "魔兽争霸", "valorant", "瓦罗兰特", "apex", "永劫无间", "原神",
+                        "崩坏", "星穹铁道", "第五人格", "和平精英", "穿越火线", "cf",
+                        "使命召唤", "cod", "街霸", "拳皇", "铁拳", "fifa", "实况",
+                        "nba2k", "游戏王", "宝可梦", "马里奥", "模拟器",
+                    ]):
+                        venue_building = "机房区"
+                    else:
+                        venue_building = "体育区"
+                else:
+                    venue_building = "E教学楼"
+            except Exception:
+                venue_building = "E教学楼"
+
+            rooms = query_rooms(capacity_min=1, building=venue_building)
+            sorted_rooms = select_best_rooms(rooms, participants) if rooms else []
+            intent = {"building": venue_building, "participants": participants}
 
             venue_html = _venue_recommend_html(sorted_rooms, participants)
-            plan_html = build_html(plan, sorted_rooms, nav)
+            plan_html = build_html(plan, sorted_rooms)
 
             state["step"] = "review"
             _save_sessions(sessions)

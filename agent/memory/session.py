@@ -12,7 +12,7 @@ _recent: dict[str, dict] = {}
 
 
 def remember(session_id: str, raw_input: str, intent: dict, plan: dict, budget: dict,
-             rooms: list, navigation: str):
+             rooms: list):
     """L1: 记住当前策划结果"""
     record = {
         "raw_input": raw_input,
@@ -20,7 +20,6 @@ def remember(session_id: str, raw_input: str, intent: dict, plan: dict, budget: 
         "plan": plan,
         "budget": budget,
         "rooms": rooms[:3],
-        "navigation": navigation,
     }
     _recent[session_id] = record
 

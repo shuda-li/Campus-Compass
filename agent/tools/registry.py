@@ -104,14 +104,6 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
-            "name": "get_navigation",
-            "description": "获取到推荐教室的步行路线",
-            "parameters": {"type": "object", "properties": {}, "required": []}
-        }
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "calculate_budget",
             "description": "计算活动预算",
             "parameters": {
@@ -155,7 +147,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "dispatch_subagent",
-            "description": "派一个 LLM 驱动的子代理在隔离上下文中执行专项任务。子代理有自己的 messages[]（完全隔离），使用白名单工具自主决策。可用类型: classroom_scout（查教室+评分+导航，会自动扩大搜索）| budget_analyst（算预算+分析+优化建议）。子代理的完整对话会被丢弃，只返回最终摘要。",
+            "description": "派一个 LLM 驱动的子代理在隔离上下文中执行专项任务。子代理有自己的 messages[]（完全隔离），使用白名单工具自主决策。可用类型: classroom_scout（查教室+评分，会自动扩大搜索）| budget_analyst（算预算+分析+优化建议）。子代理的完整对话会被丢弃，只返回最终摘要。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -184,7 +176,24 @@ TOOL_DEFINITIONS = [
 ]
 
 
+# P1-6：工具结果截断上限
+MAX_RESULT_LENGTH = 2000
+
+
+def _truncate_result(raw: str, tool_name: str) -> str:
+    """超过上限时截断并附加提示，防止 observation 炸上下文。"""
+    if len(raw) <= MAX_RESULT_LENGTH:
+        return raw
+    truncated = raw[:MAX_RESULT_LENGTH]
+    return (
+        truncated
+        + f"\n\n[... 结果已截断，原始长度 {len(raw)} 字符，"
+        + f"已显示前 {MAX_RESULT_LENGTH} 字符]"
+    )
+
+
 def dispatch_tool(tool_name: str, arguments: dict, state) -> str:
+    """工具调度，所有结果自动截断（P1-6）。"""
     try:
         if tool_name == "todowrite":
             todos = arguments.get("todos", [])
@@ -247,25 +256,43 @@ def dispatch_tool(tool_name: str, arguments: dict, state) -> str:
             except Exception:
                 pass
             state.plan = generate_plan(topic, participants, state.sorted_rooms, llm_fn, skill=skill)
-            return json.dumps({
+            return _truncate_result(json.dumps({
                 "ok": True,
                 "topic": state.plan.get("activity_topic", topic),
                 "content_count": len(state.plan.get("activity_content", [])),
                 "materials_count": len(state.plan.get("activity_materials", [])),
                 "purpose_preview": state.plan.get("activity_purpose", "")[:80],
-            }, ensure_ascii=False)
+            }, ensure_ascii=False), tool_name)
 
         if tool_name == "find_classrooms":
             from tools.db_service import query_rooms
             capacity_min = arguments.get("capacity_min", state.participants)
             building = arguments.get("building", state.intent.get("building") if state.intent else None)
+
+            # ── 体育类活动按子类型路由 ──
+            if state.matched_skill_name == "sports_planning":
+                topic_lower = (state.raw_input or "").lower()
+                if any(kw in topic_lower for kw in [
+                    "电竞", "电子竞技", "电竞赛", "游戏赛", "游戏竞技", "游戏竞赛",
+                    "网游", "端游", "手游", "主机游戏", "电竞联赛", "电竞挑战", "电竞杯",
+                    "lol", "英雄联盟", "dota", "csgo", "cs2", "王者荣耀", "吃鸡",
+                    "绝地求生", "pubg", "守望先锋", "overwatch", "炉石传说", "星际争霸",
+                    "魔兽争霸", "valorant", "瓦罗兰特", "apex", "永劫无间", "原神",
+                    "崩坏", "星穹铁道", "第五人格", "和平精英", "穿越火线", "cf",
+                    "使命召唤", "cod", "街霸", "拳皇", "铁拳", "fifa", "实况",
+                    "nba2k", "游戏王", "宝可梦", "马里奥", "模拟器",
+                ]):
+                    building = "机房区"
+                else:
+                    building = "体育区"
+
             required_equipment = arguments.get("required_equipment", None)
             state.rooms = query_rooms(capacity_min=capacity_min, building=building, required_equipment=required_equipment)
-            return json.dumps({
+            return _truncate_result(json.dumps({
                 "ok": True,
                 "count": len(state.rooms),
                 "preview": [{"room_id": r.get("room_id"), "building": r.get("building"), "capacity": r.get("capacity")} for r in state.rooms[:5]],
-            }, ensure_ascii=False)
+            }, ensure_ascii=False), tool_name)
 
         if tool_name == "score_classrooms":
             from engine.room_scorer import rank_rooms
@@ -275,13 +302,7 @@ def dispatch_tool(tool_name: str, arguments: dict, state) -> str:
             intent_for_scoring = {"building": building, "equipment": equipment, "participants": participants}
             state.sorted_rooms = rank_rooms(state.rooms, intent_for_scoring)
             top3 = [{"rank": i + 1, "room_id": r.get("room_id"), "capacity": r.get("capacity")} for i, r in enumerate(state.sorted_rooms[:3])]
-            return json.dumps({"ok": True, "total": len(state.sorted_rooms), "top3": top3}, ensure_ascii=False)
-
-        if tool_name == "get_navigation":
-            from tools.navigation import generate_navigation
-            top_room = state.sorted_rooms[0] if state.sorted_rooms else {}
-            state.navigation = generate_navigation(top_room)
-            return json.dumps({"ok": True, "navigation_preview": state.navigation[:200]}, ensure_ascii=False)
+            return _truncate_result(json.dumps({"ok": True, "total": len(state.sorted_rooms), "top3": top3}, ensure_ascii=False), tool_name)
 
         if tool_name == "calculate_budget":
             from tools.budget_calc import estimate_budget
@@ -295,37 +316,49 @@ def dispatch_tool(tool_name: str, arguments: dict, state) -> str:
             else:
                 template = {}
             state.budget = estimate_budget(template, participants, activity_type)
-            return json.dumps({"ok": True, "total": state.budget.get("合计", 0), "level": state.budget.get("预算等级", "")}, ensure_ascii=False)
+            return _truncate_result(json.dumps({"ok": True, "total": state.budget.get("合计", 0), "level": state.budget.get("预算等级", "")}, ensure_ascii=False), tool_name)
 
         if tool_name == "finalize":
+            # ── P0-4：前置校验，todo 未完禁止结束 ──
+            pending_todos = [t for t in state.todos if t["status"] in ("pending", "in_progress")]
+            if pending_todos:
+                names = [t["content"] for t in pending_todos[:5]]
+                return json.dumps({
+                    "ok": False,
+                    "error": f"还有 {len(pending_todos)} 个待办未完成，不能 finalize",
+                    "pending_todos": names,
+                    "hint": "请先完成所有待办项（调 todowrite 更新状态）后再调 finalize",
+                }, ensure_ascii=False)
+
             from agent.formatter import build_html
             from agent.memory.persistence import auto_remember
-            state.html_output = build_html(state.plan, state.sorted_rooms, state.navigation, state.budget)
+            state.html_output = build_html(state.plan, state.sorted_rooms, state.budget)
             if state.intent:
                 auto_remember(state.plan, state.intent, state.participants)
-            return json.dumps({"ok": True, "done": True, "html_length": len(state.html_output)}, ensure_ascii=False)
+            return _truncate_result(json.dumps({"ok": True, "done": True, "html_length": len(state.html_output)}, ensure_ascii=False), tool_name)
 
         if tool_name == "save_user_preference":
             from agent.memory.persistence import save_preference
             key = arguments.get("key", "")
             value = arguments.get("value", "")
             save_preference("_manual", key, value)
-            return json.dumps({"ok": True, "saved": f"{key}={value}"}, ensure_ascii=False)
+            return _truncate_result(json.dumps({"ok": True, "saved": f"{key}={value}"}, ensure_ascii=False), tool_name)
 
         if tool_name == "dispatch_subagent":
             from agent.tools.subagent import run_subagent
             agent_type = arguments.get("agent_type", "classroom_scout")
             prompt = arguments.get("prompt", "")
-            return run_subagent(agent_type, prompt, state)
+            return _truncate_result(run_subagent(agent_type, prompt, state), tool_name)
 
         if tool_name == "search_web":
             from agent.mcp.tavily_search import search_web
             query = arguments.get("query", "")
             max_results = min(arguments.get("max_results", 3), 5)
-            return search_web(query, max_results=max_results)
+            return _truncate_result(search_web(query, max_results=max_results), tool_name)
 
-        return json.dumps({"ok": False, "error": f"未知工具: {tool_name}"}, ensure_ascii=False)
+        return _truncate_result(json.dumps({"ok": False, "error": f"未知工具: {tool_name}"}, ensure_ascii=False), tool_name)
 
     except Exception as e:
         import traceback
-        return json.dumps({"ok": False, "error": str(e), "trace": traceback.format_exc()[-500:]}, ensure_ascii=False)
+        raw = json.dumps({"ok": False, "error": str(e), "trace": traceback.format_exc()[-500:]}, ensure_ascii=False)
+        return _truncate_result(raw, tool_name)

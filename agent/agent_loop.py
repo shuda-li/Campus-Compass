@@ -63,9 +63,8 @@ SYSTEM_PROMPT = """你是 Campus Compass 校园活动策划 Agent。你通过调
 3. generate_activity_plan — 生成方案
 4. find_classrooms — 查询教室（空则扩大范围）
 5. score_classrooms — 评分排序（如有教室）
-6. get_navigation — 获取导航
-7. calculate_budget — 计算预算
-8. finalize — 生成最终HTML
+6. calculate_budget — 计算预算
+7. finalize — 生成最终HTML
 
 ## 行为规则
 
@@ -75,6 +74,43 @@ SYSTEM_PROMPT = """你是 Campus Compass 校园活动策划 Agent。你通过调
 - 用户有长期记忆时，参考记忆中的偏好
 - 如果用户在活动中表现出偏好（常用建筑、惯用人数），调用 save_user_preference 保存
 - 对于不熟悉的活动主题，可以使用 search_web 搜索背景知识和案例来丰富方案内容"""
+
+
+# ═══════════════════════════════════════════════════════════════
+# 环境信息（P1-5：启动时注入可用场地概况）
+# ═══════════════════════════════════════════════════════════════
+
+def _build_env_info() -> str:
+    """查询数据库，生成当前环境信息块。只执行一次（保护前缀缓存）。"""
+    try:
+        from tools.db_service import query_rooms
+        all_rooms = query_rooms(capacity_min=1)
+        if not all_rooms:
+            return ""
+
+        # 按建筑分组
+        buildings = {}
+        for r in all_rooms:
+            bld = r.get("building", "未知")
+            buildings.setdefault(bld, []).append(r)
+
+        lines = ["\n## 当前可用场地"]
+        for bld, rooms in buildings.items():
+            caps = sorted([r["capacity"] for r in rooms])
+            room_ids = [r["room_id"] for r in rooms]
+            lines.append(f"- **{bld}**（{len(rooms)} 个）：{', '.join(room_ids)}")
+            lines.append(f"  容量范围：{min(caps)}~{max(caps)} 人")
+
+        lines.append("\n### 场地路由规则")
+        lines.append("- 体育类活动（篮球/足球/运动会等）→ 查 **体育区**（体育馆/田径场）")
+        lines.append("- 电竞/电子竞技类 → 查 **机房区**（E506/E507，各100机位）")
+        lines.append("- 讲座/竞赛/展览/演出/实践等 → 查 **E教学楼**（21间教室）")
+        lines.append("- 查教室时如果该区无结果，可尝试扩大搜索或去掉设备筛选")
+
+        return "\n".join(lines)
+    except Exception as e:
+        print(f"[EnvInfo] 获取场地信息失败: {e}")
+        return ""
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -133,6 +169,11 @@ def _build_system_prompt(user_input: str = "") -> tuple:
     """
     parts = [SYSTEM_PROMPT]
 
+    # ── 环境信息（P1-5：让模型知道有什么可用）──
+    env_info = _build_env_info()
+    if env_info:
+        parts.append(env_info)
+
     # ── 匹配技能指引（P0-1）──
     matched_name = ""
     matched_skill = {}
@@ -158,6 +199,40 @@ def _build_system_prompt(user_input: str = "") -> tuple:
 # ═══════════════════════════════════════════════════════════════
 # 易变暂存（Volatile Scratch）
 # ═══════════════════════════════════════════════════════════════
+
+BREAKER_THRESHOLD = 3  # 同一工具+同一参数连续 N 次触发断路
+
+
+def _tool_fingerprint(tool_name: str, tool_args: dict) -> str:
+    """生成工具调用的指纹（用于检测重复调用）。"""
+    # 对参数做稳定序列化（忽略 key 顺序差异）
+    args_key = json.dumps(tool_args, ensure_ascii=False, sort_keys=True)
+    return f"{tool_name}|{args_key}"
+
+
+def _check_circuit_breaker(state: AgentState) -> str:
+    """
+    检测死循环：同一工具+同一参数连续调用 ≥ BREAKER_THRESHOLD 次。
+
+    返回断路提醒消息，如果没有触发则返回空字符串。
+    """
+    history = state.tool_call_history
+    if len(history) < BREAKER_THRESHOLD:
+        return ""
+
+    # 取最近 N 次调用
+    recent = history[-BREAKER_THRESHOLD:]
+    if len(set(recent)) == 1:
+        # 全部相同 → 死循环
+        state.breaker_triggered = True
+        tool_name = recent[0].split("|")[0]
+        return (
+            f"[Circuit Breaker] ⚠️ 你已连续 {BREAKER_THRESHOLD} 次调用 `{tool_name}` "
+            f"且参数完全相同。结果不会改变。\n"
+            f"请立即换一种方式：跳过此步、尝试不同参数、或标记此步骤失败后继续推进。"
+        )
+
+    return ""
 
 def _render_todo_section(todos: list) -> str:
     """渲染当前待办列表（用于 nag 消息）"""
@@ -192,6 +267,12 @@ def _collect_scratch_notes(state: AgentState, messages: list) -> list:
                 + _render_todo_section(state.todos)
             )
             notes.append(("nag_todo", nag))
+
+    # ── Nag 2: Circuit Breaker（死循环检测）──
+    cb_msg = _check_circuit_breaker(state)
+    if cb_msg:
+        notes.append(("breaker", cb_msg))
+        trace.nag("circuit_breaker")
 
     # ── 效率提醒：Token 预算 ──
     should_warn, should_hard_trim = soft_trim_check(messages)
@@ -344,6 +425,10 @@ def run_agent(user_input: str, session_id: str = None) -> str:
                     func_args = json.loads(tc["function"]["arguments"])
                 except json.JSONDecodeError:
                     func_args = {}
+
+                # ── P0-3：记录工具调用指纹（用于死循环检测）──
+                fp = _tool_fingerprint(func_name, func_args)
+                state.tool_call_history.append(fp)
                 print(f"[Agent] [tool] {func_name}({json.dumps(func_args, ensure_ascii=False)[:100]})")
 
                 t_tool0 = time.time()
@@ -374,7 +459,7 @@ def run_agent(user_input: str, session_id: str = None) -> str:
             print("[Agent] [WARN] 未调用 finalize，用已有数据生成")
             from agent.formatter import build_html
             from agent.memory.persistence import auto_remember
-            state.html_output = build_html(state.plan, state.sorted_rooms, state.navigation, state.budget)
+            state.html_output = build_html(state.plan, state.sorted_rooms, state.budget)
             if state.intent:
                 auto_remember(state.plan, state.intent, state.participants)
 
@@ -397,7 +482,6 @@ def _run_fallback_pipeline(user_input: str, state: AgentState, session_id: str, 
     from engine.plan_generator import generate_plan
     from engine.room_scorer import rank_rooms
     from tools.db_service import query_rooms
-    from tools.navigation import generate_navigation
     from tools.budget_calc import estimate_budget
     from agent.formatter import build_html
     from agent.memory.persistence import auto_remember
@@ -419,11 +503,8 @@ def _run_fallback_pipeline(user_input: str, state: AgentState, session_id: str, 
     if state.rooms:
         print("[Fallback] Step 5: 教室排序")
         state.sorted_rooms = rank_rooms(state.rooms, state.intent)
-        print("[Fallback] Step 6: 导航生成")
-        top = state.sorted_rooms[0] if state.sorted_rooms else {}
-        state.navigation = generate_navigation(top if top else {})
 
-    print("[Fallback] Step 7: 预算计算")
+    print("[Fallback] Step 6: 预算计算")
     template_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "templates.json")
     if os.path.exists(template_path):
         with open(template_path, "r", encoding="utf-8") as f:
@@ -433,8 +514,8 @@ def _run_fallback_pipeline(user_input: str, state: AgentState, session_id: str, 
         template = {}
     state.budget = estimate_budget(template, state.participants, state.intent.get("activity_type", "讲座"))
 
-    print("[Fallback] Step 8: 生成 HTML + L3记忆")
-    state.html_output = build_html(state.plan, state.sorted_rooms, state.navigation, state.budget)
+    print("[Fallback] Step 7: 生成 HTML + L3记忆")
+    state.html_output = build_html(state.plan, state.sorted_rooms, state.budget)
     auto_remember(state.plan, state.intent, state.participants)
 
     trace.event("fallback_complete", {"steps": 8})
@@ -445,7 +526,7 @@ def _run_fallback_pipeline(user_input: str, state: AgentState, session_id: str, 
         try:
             from agent.memory.session import remember
             remember(session_id, user_input, state.intent, state.plan, state.budget,
-                     state.sorted_rooms, state.navigation)
+                     state.sorted_rooms)
         except Exception:
             pass
 

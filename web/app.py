@@ -33,6 +33,14 @@ print("[Web] 数据库已初始化")
 
 app = Flask(__name__)
 
+# ── 注册 UI 图标静态目录 ──
+from flask import send_from_directory
+UI_DIR = Path(__file__).parent.parent / "UI"
+
+@app.route("/ui/<path:filename>")
+def ui_static(filename):
+    return send_from_directory(str(UI_DIR), filename)
+
 SESSION_FILE = Path(__file__).parent.parent / ".memory" / "web_sessions.json"
 _lock = threading.Lock()
 
@@ -175,7 +183,7 @@ def _topic_switch_warning() -> str:
     """新主题警告消息 HTML。"""
     return '''<div class="bg-amberMuted border border-amberWarn/30 rounded-2xl px-5 py-4">
     <div class="flex items-center gap-2 mb-2">
-        <span class="text-lg">⚠️</span>
+        <img src="/ui/icon-topic-switch.svg" class="ui-icon ui-icon-lg" alt="">
         <span class="text-sm font-semibold text-amber">同一个对话多个主题可能会内容混淆！</span>
     </div>
     <p class="text-xs text-stardust leading-relaxed">
@@ -202,7 +210,7 @@ def _invalid_topic_html() -> str:
     """无效主题提示 HTML。"""
     return '''<div class="glass-panel rounded-2xl px-5 py-4">
     <div class="flex items-center gap-2 mb-3">
-        <span class="text-lg">📝</span>
+        <img src="/ui/icon-edit.svg" class="ui-icon ui-icon-lg" alt="">
         <span class="text-sm font-semibold text-starlight">请提供您需要策划的活动主题</span>
     </div>
     <p class="text-sm text-starlight leading-relaxed mb-2">
@@ -218,10 +226,10 @@ def _review_hint_html(topic: str) -> str:
     """方案已生成后的改进引导 HTML。"""
     return f'''<div class="glass-panel rounded-2xl px-5 py-3 mt-3">
     <p class="text-xs text-stardust">
-        📋 当前主题：<span class="text-nebula font-semibold">{topic}</span>
+        <img src="/ui/icon-clipboard.svg" class="ui-icon ui-icon-sm" alt=""> 当前主题：<span class="text-nebula font-semibold">{topic}</span>
     </p>
     <p class="text-xs text-stardust mt-1">
-        💡 你可以输入改进需求来调整方案（如"换大一点的教室"、"增加互动环节"等）
+        <img src="/ui/icon-bulb.svg" class="ui-icon ui-icon-sm" alt=""> 你可以输入改进需求来调整方案（如"换大一点的教室"、"增加互动环节"等）
     </p>
 </div>'''
 
@@ -283,7 +291,7 @@ def _save_to_memory(sid: str, topic: str, plan: dict, intent: dict, participants
 def _ask_topic_html() -> str:
     return '''<div class="glass-panel rounded-2xl px-5 py-4">
     <div class="flex items-center gap-2 mb-3">
-        <span class="text-lg">📝</span>
+        <img src="/ui/icon-edit.svg" class="ui-icon ui-icon-lg" alt="">
         <span class="text-sm font-semibold text-starlight">请提供您需要策划的活动主题</span>
     </div>
     <p class="text-sm text-starlight leading-relaxed mb-3">
@@ -291,7 +299,7 @@ def _ask_topic_html() -> str:
         例如：<span class="text-nebula">"科技创新活动"</span>、<span class="text-nebula">"电脑硬件知识分享会"</span>
     </p>
     <div class="flex items-center gap-2">
-        <span class="text-xs text-stardust">💡 输入活动主题后按 Enter 发送</span>
+        <span class="text-xs text-stardust"><img src="/ui/icon-bulb.svg" class="ui-icon ui-icon-sm" alt=""> 输入活动主题后按 Enter 发送</span>
     </div>
 </div>'''
 
@@ -299,10 +307,10 @@ def _ask_topic_html() -> str:
 def _ask_participants_html(topic: str, was_expanded: bool) -> str:
     hint = ""
     if was_expanded:
-        hint = f'<p class="text-xs text-nebula mb-2">✨ 您的主题已扩展为：<strong>{topic}</strong></p>'
+        hint = f'<p class="text-xs text-nebula mb-2"><img src="/ui/icon-sparkle.svg" class="ui-icon ui-icon-sm" alt=""> 您的主题已扩展为：<strong>{topic}</strong></p>'
     return f'''<div class="glass-panel rounded-2xl px-5 py-4">
     <div class="flex items-center gap-2 mb-3">
-        <span class="text-lg">👥</span>
+        <img src="/ui/icon-people.svg" class="ui-icon ui-icon-lg" alt="">
         <span class="text-sm font-semibold text-starlight">请问该活动预计参与人数大约是多少？</span>
     </div>
     {hint}
@@ -311,21 +319,21 @@ def _ask_participants_html(topic: str, was_expanded: bool) -> str:
         输入数字即可（如 <span class="text-nebula font-semibold">50</span> 或 <span class="text-nebula font-semibold">80人</span>）
     </p>
     <div class="flex items-center gap-2">
-        <span class="text-xs text-stardust">💡 输入人数后按 Enter</span>
+        <span class="text-xs text-stardust"><img src="/ui/icon-bulb.svg" class="ui-icon ui-icon-sm" alt=""> 输入人数后按 Enter</span>
     </div>
 </div>'''
 
 
 def _topic_expand_notice(original: str, expanded: str) -> str:
     return f'''<div class="bg-nebulaMuted border border-nebula/25 rounded-2xl px-5 py-3 mb-3">
-    <p class="text-xs text-nebula font-semibold mb-1">🔍 检测到主题较简略，已自动扩展</p>
+    <p class="text-xs text-nebula font-semibold mb-1"><img src="/ui/icon-search.svg" class="ui-icon ui-icon-sm" alt=""> 检测到主题较简略，已自动扩展</p>
     <p class="text-xs text-stardust">"{original}" → <span class="text-nebula">"{expanded}"</span></p>
 </div>'''
 
 
 def _venue_recommend_html(rooms: list, participants: int) -> str:
     if not rooms:
-        return '<div class="glass-panel border border-amberWarn/10 rounded-2xl px-5 py-3 mb-3"><p class=\"text-xs text-amberWarn\">⚠️ 暂无可匹配教室</p></div>'
+        return '<div class="glass-panel border border-amberWarn/10 rounded-2xl px-5 py-3 mb-3"><p class=\"text-xs text-amberWarn\"><img src="/ui/icon-warning.svg" class="ui-icon ui-icon-sm" alt=""> 暂无可匹配教室</p></div>'
 
     def _room_type(r: dict) -> str:
         """从 equipment 数组中提取教室类型。"""
@@ -365,7 +373,7 @@ def _venue_recommend_html(rooms: list, participants: int) -> str:
 
     return f'''<div class="glass-panel border border-greenOk/10 rounded-2xl px-5 py-3 mb-3">
     <div class="flex items-center gap-2 mb-2">
-        <span class="text-lg">🏫</span>
+        <img src="/ui/icon-venue.svg" class="ui-icon ui-icon-lg" alt="">
         <span class="text-sm font-semibold text-starlight">场地推荐</span>
         <span class="text-xs text-stardust ml-auto">填充率 50% + 距离 50%</span>
     </div>
@@ -530,7 +538,7 @@ def chat():
 
         reply = f'''<div class="glass-panel rounded-2xl px-5 py-4">
     <div class="flex items-center gap-2 mb-3">
-        <span class="text-lg">📋</span>
+        <img src="/ui/icon-clipboard.svg" class="ui-icon ui-icon-lg" alt="">
         <span class="text-sm font-semibold text-starlight">确认活动信息</span>
     </div>
     <p class="text-sm text-starlight leading-relaxed mb-2">

@@ -29,3 +29,5 @@ test_mcp.py
 test_qwen.py
 temp_original_workflow.md
 Campus-Compass-完整工作流文档.md
+nul
+s -ExecutionPolicy*

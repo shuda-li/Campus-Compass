@@ -168,6 +168,14 @@
         .toggle-checkbox:checked { right: 0; }
         .toggle-checkbox:checked+.toggle-bg { background: linear-gradient(135deg, rgba(139,92,246,0.6), rgba(240,192,96,0.4)); }
 
+        /* ═══ UI 图标统一样式 ═══ */
+        .ui-icon { display: inline-block; vertical-align: middle; flex-shrink: 0; }
+        .ui-icon-sm { width: 16px; height: 16px; }
+        .ui-icon-md { width: 20px; height: 20px; }
+        .ui-icon-lg { width: 24px; height: 24px; }
+        .ui-icon-xl { width: 32px; height: 32px; }
+        .ui-icon-activity { width: 36px; height: 36px; }
+
         /* ═══ 星穹铁道特色的六边形装饰 ═══ */
         .hex-decoration {
             position: relative;
@@ -365,31 +373,31 @@
                     <div class="grid grid-cols-4 gap-3 max-w-2xl w-full">
                         <button onclick="sendQuick('科技创新活动')"
                             class="flex flex-col items-center gap-2 p-4 glass-panel rounded-2xl hover:border-nebula/30 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group">
-                            <span class="text-2xl group-hover:scale-110 transition-transform">🚀</span>
+                            <img src="/ui/icon-competition.svg" class="ui-icon ui-icon-activity group-hover:scale-110 transition-transform" alt="竞赛">
                             <span class="text-sm font-medium text-starlight">科技创新</span>
                             <span class="text-xs text-stardust">自动扩展</span>
                         </button>
                         <button onclick="sendQuick('电脑硬件知识分享会')"
                             class="flex flex-col items-center gap-2 p-4 glass-panel rounded-2xl hover:border-amber/30 hover:shadow-[0_0_20px_rgba(240,192,96,0.12)] transition-all group">
-                            <span class="text-2xl group-hover:scale-110 transition-transform">🎭</span>
+                            <img src="/ui/icon-performance.svg" class="ui-icon ui-icon-activity group-hover:scale-110 transition-transform" alt="演出">
                             <span class="text-sm font-medium text-starlight">硬件分享</span>
                             <span class="text-xs text-stardust">直接采用</span>
                         </button>
                         <button onclick="sendQuick('校园音乐节')"
                             class="flex flex-col items-center gap-2 p-4 glass-panel rounded-2xl hover:border-nebula/30 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group">
-                            <span class="text-2xl group-hover:scale-110 transition-transform">🎵</span>
+                            <img src="/ui/icon-performance.svg" class="ui-icon ui-icon-activity group-hover:scale-110 transition-transform" alt="演出">
                             <span class="text-sm font-medium text-starlight">校园音乐</span>
                             <span class="text-xs text-stardust">自动扩展</span>
                         </button>
                         <button onclick="sendQuick('大学生编程马拉松挑战赛')"
                             class="flex flex-col items-center gap-2 p-4 glass-panel rounded-2xl hover:border-cyan/30 hover:shadow-[0_0_20px_rgba(34,211,187,0.12)] transition-all group">
-                            <span class="text-2xl group-hover:scale-110 transition-transform">🏆</span>
+                            <img src="/ui/icon-competition.svg" class="ui-icon ui-icon-activity group-hover:scale-110 transition-transform" alt="竞赛">
                             <span class="text-sm font-medium text-starlight">编程马拉松</span>
                             <span class="text-xs text-stardust">直接采用</span>
                         </button>
                         <button onclick="sendQuick('校园摄影展')"
                             class="flex flex-col items-center gap-2 p-4 glass-panel rounded-2xl hover:border-amber/30 hover:shadow-[0_0_20px_rgba(240,192,96,0.12)] transition-all group">
-                            <span class="text-2xl group-hover:scale-110 transition-transform">📷</span>
+                            <img src="/ui/icon-exhibition.svg" class="ui-icon ui-icon-activity group-hover:scale-110 transition-transform" alt="展览">
                             <span class="text-sm font-medium text-starlight">摄影展</span>
                             <span class="text-xs text-stardust">30人</span>
                         </button>
@@ -420,7 +428,7 @@
                         <button id="tempToggleBtn" onclick="toggleTempRow()"
                             class="w-8 h-8 bg-voidHover border border-voidBorder rounded-full flex items-center justify-center hover:border-nebula/30 hover:shadow-[0_0_8px_rgba(139,92,246,0.15)] transition-all flex-shrink-0"
                             title="创意度" aria-label="创意度设置">
-                            <span class="text-xs">🎲</span>
+                            <img src="/ui/icon-random.svg" class="ui-icon ui-icon-sm" alt="随机">
                         </button>
                         <button id="sendBtn"
                             class="w-9 h-9 bg-nebula/25 border border-nebula/40 rounded-full flex items-center justify-center hover:bg-nebula/35 hover:shadow-[0_0_15px_rgba(139,92,246,0.3)] transition-all disabled:opacity-30 flex-shrink-0"
@@ -440,7 +448,7 @@
         <div class="glass-panel-strong rounded-2xl p-5 w-80 shadow-2xl shadow-black/40">
             <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center gap-2">
-                    <span class="text-sm">⚙️</span>
+                    <img src="/ui/icon-settings.svg" class="ui-icon ui-icon-md" alt="设置">
                     <span class="text-sm font-semibold text-starlight">代理设置</span>
                 </div>
                 <button onclick="toggleProxyPanel()" class="text-stardust hover:text-starlight" title="关闭" aria-label="关闭代理设置">
@@ -488,7 +496,7 @@
         <div class="glass-panel-strong rounded-2xl p-5 w-80 shadow-2xl shadow-black/40">
             <div class="flex items-center justify-between mb-4">
                 <div class="flex items-center gap-2">
-                    <span class="text-sm">🎨</span>
+                    <img src="/ui/icon-creative.svg" class="ui-icon ui-icon-md" alt="创意">
                     <span class="text-sm font-semibold text-starlight">主题设置</span>
                 </div>
                 <button onclick="toggleThemePanel()" class="text-stardust hover:text-starlight" title="关闭" aria-label="关闭主题设置">
@@ -501,11 +509,11 @@
                 <div class="flex gap-2">
                     <button id="btnDayMode" onclick="setTheme('day')"
                         class="flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all border bg-voidHover border-voidBorder text-stardust hover:border-amber/30 hover:text-amber">
-                        ☀️ 曙光
+                        <img src="/ui/icon-sun.svg" class="ui-icon ui-icon-sm" alt=""> 曙光
                     </button>
                     <button id="btnNightMode" onclick="setTheme('night')"
                         class="flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all border bg-nebulaMuted border-nebula/30 text-nebula">
-                        🌙 星夜
+                        <img src="/ui/icon-moon.svg" class="ui-icon ui-icon-sm" alt=""> 星夜
                     </button>
                 </div>
             </div>
@@ -518,11 +526,11 @@
                 <div class="flex gap-2">
                     <button onclick="document.getElementById('bgImageInput').click()"
                         class="flex-1 py-2 px-3 bg-voidHover border border-voidBorder rounded-lg text-xs text-stardust hover:border-nebula/30 transition-all text-center">
-                        📁 选择本地图片
+                        <img src="/ui/icon-folder.svg" class="ui-icon ui-icon-sm" alt=""> 选择本地图片
                     </button>
                     <button id="btnClearBg" onclick="clearBgImage()"
                         class="py-2 px-3 bg-voidHover border border-voidBorder rounded-lg text-xs text-stardust hover:border-redErr/30 hover:text-redErr transition-all hidden">
-                        ✕ 清除
+                        <img src="/ui/icon-close.svg" class="ui-icon ui-icon-sm" alt=""> 清除
                     </button>
                 </div>
                 <p id="bgImageName" class="text-xs text-stardust mt-2 hidden"></p>
@@ -642,9 +650,9 @@
                     body: JSON.stringify({ address }),
                 });
                 const d = await r.json();
-                showProxyMsg(d.success ? "✅ " + d.message : "❌ " + d.message, d.success ? "success" : "error");
+                showProxyMsg("<img src='/ui/icon-check.svg' class='ui-icon ui-icon-sm' alt=''> " + d.message, d.success ? "success" : "error");
             } catch (e) {
-                showProxyMsg("❌ 网络请求失败", "error");
+                showProxyMsg("<img src='/ui/icon-error.svg' class='ui-icon ui-icon-sm' alt=''> 网络请求失败", "error");
             } finally {
                 testBtn.disabled = false;
                 testText.classList.remove("hidden");
@@ -657,7 +665,7 @@
             if (!proxyAddress) { showProxyMsg("请输入代理地址", "error"); return; }
             saveProxyToStorage();
             syncProxyToServer();
-            showProxyMsg("✅ 配置已保存", "success");
+            showProxyMsg("<img src='/ui/icon-check.svg' class='ui-icon ui-icon-sm' alt=''> 配置已保存", "success");
             setTimeout(() => toggleProxyPanel(), 800);
         }
         document.getElementById("proxyAddress").addEventListener("keydown", function(e) {
@@ -742,7 +750,7 @@
                 customBgImage = e.target.result;
                 applyTheme();
                 saveTheme();
-                showThemeMsg('✅ 背景图片已应用（透明度 75%）', 'success');
+                showThemeMsg('<img src="/ui/icon-check.svg" class="ui-icon ui-icon-sm" alt=""> 背景图片已应用（透明度 75%）', 'success');
             };
             reader.onerror = function() { showThemeMsg('图片读取失败，请重试', 'error'); };
             reader.readAsDataURL(file);

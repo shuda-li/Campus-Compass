@@ -294,11 +294,19 @@ def build_plan_prompt(topic: str, participants: int, search_knowledge: dict = No
         from engine.intent_detector import apply_intents_to_prompt
         intent_part = apply_intents_to_prompt(active_intents)
 
+    # ── Base-Plan 修改模式：有 last_plan + 锚定/意图 → 在原始 plan 上修改 ──
+    base_part = ""
+    if last_plan and (anchors or active_intents):
+        from engine.plan_patcher import build_base_plan_prompt
+        # 从 intent/ancher 构建修改描述
+        mod_desc = "; ".join([a.get("keyword","") for a in (anchors or [])[:3]]) if anchors else (active_intents[0].get("value","修改方案") if active_intents else topic)
+        base_part = build_base_plan_prompt(last_plan, mod_desc, anchors, active_intents)
+
     return f'''你是一个有创意的校园活动策划师。请为主题"{topic}"设计一个独特、有趣、可执行的活动方案。
 
 当前时间: {now_str}
 参与人数: {participants}人
-{knowledge_part}{memory_part}{skill_part}{anchor_part}{intent_part}
+{knowledge_part}{memory_part}{skill_part}{base_part}{anchor_part}{intent_part}
 核心原则:
 1. 深入理解"{topic}"的真正含义——如果它涉及专业知识（如MBTI人格理论、编程技术、心理学等），你必须展现对该领域的理解
 2. 活动目的要写出"{topic}"这个主题的独特价值，不要写"搭建平台""促进交流"这种万能套话

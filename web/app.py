@@ -100,6 +100,9 @@ def _detect_topic_switch(current_topic: str, new_input: str) -> bool:
                 for kw in kw_list:
                     if kw in new_input:
                         return True
+            # 新旧主题都无关键词命中：如果输入不像修改命令且内容≥3字 → 疑似新主题
+            if not _looks_like_modification(new_input) and len(new_input.strip()) >= 3:
+                return True
             return False
 
         # 统计新输入在当前技能 vs 其他技能中的关键词命中
@@ -136,10 +139,36 @@ def _detect_topic_switch(current_topic: str, new_input: str) -> bool:
         if len(alien_in_same) >= 1:
             return True
 
+        # D) 新输入全技能零命中 + 不像修改命令 + 长度≥3 → 疑似新主题
+        #    （如"只因你太美"vs"蔡徐坤演唱会"，双方无共享关键词，但语义明显无关）
+        total_new_hits = current_hit_count + cross_alien_count
+        if total_new_hits == 0 and not _looks_like_modification(new_input) and len(new_input.strip()) >= 3:
+            return True
+
     except Exception:
         pass
 
     return False
+
+
+# ── 修改意图关键词检测 ──
+_MODIFICATION_KEYWORDS = [
+    '改', '换', '加', '减', '调', '变更', '修改', '改成', '换成',
+    '增加', '减少', '调整', '变', '更新', '不要', '去掉', '删除',
+    '缩短', '延长', '扩大', '缩小', '提高', '降低', '替换', '移除',
+    '添加', '补充', '优化', '完善',
+]
+
+
+def _looks_like_modification(user_input: str) -> bool:
+    """
+    检测用户输入是否像是对已有方案的修改/改进请求。
+    用于区分「改方案」和「换主题」——当关键词锚定和意图检测都失败时兜底。
+    """
+    low = user_input.strip().lower()
+    if len(low) <= 2:
+        return False
+    return any(kw in low for kw in _MODIFICATION_KEYWORDS)
 
 
 def _topic_switch_warning() -> str:
@@ -610,11 +639,47 @@ def chat():
         else:
             state["active_intents"] = None
 
+        # ── Phase 3: 确定性补丁（简单修改直接 patch JSON，零 LLM）──
+        if anchors and last_plan:
+            from engine.plan_patcher import classify_modification, deterministic_patch
+            patch_mode, patches = classify_modification(anchors, merged_intents, user_msg)
+            if patch_mode == "deterministic" and patches:
+                import copy
+                plan_copy = copy.deepcopy(last_plan)
+                new_plan, change_log = deterministic_patch(plan_copy, patches)
+                print(f"[Web] 确定性补丁: {'; '.join(change_log)}")
+
+                # 处理 participants override
+                if "_participants_override" in new_plan:
+                    state["participants"] = new_plan.pop("_participants_override")
+
+                state["last_plan"] = new_plan
+                state["_deterministic_plan"] = new_plan   # stream 端点识别标记
+                state["active_intents"] = None
+                state["anchors"] = None
+                state["step"] = "streaming"
+                _save_sessions(sessions)
+
+                return jsonify({
+                    "success": True,
+                    "session_id": sid,
+                    "stream": True,
+                    "topic": state["expanded_topic"] or state["topic"],
+                    "participants": state["participants"],
+                })
+
         # ── 单主题检测：锚定和意图都失败时才触发 ──
         # 有锚定 → 确认是改进反馈；有意图 → 可能是改进
         # 两者都没有 → 疑似换题，警告
         if not anchors and not merged_intents:
             if _detect_topic_switch(state.get("expanded_topic") or state["topic"], user_msg):
+                return jsonify({
+                    "reply": _topic_switch_warning() + _review_hint_html(state["expanded_topic"] or state["topic"]),
+                    "success": True,
+                    "session_id": sid,
+                })
+            # P1-fix：也不像修改命令 → 同样警告换题，防止无信号输入穿透
+            if not _looks_like_modification(user_msg):
                 return jsonify({
                     "reply": _topic_switch_warning() + _review_hint_html(state["expanded_topic"] or state["topic"]),
                     "success": True,
@@ -655,43 +720,46 @@ def chat_stream():
     active_intents = state.get("active_intents")  # 用户修改意图列表
     anchors = state.get("anchors")                 # 关键词锚定结果
     last_plan = state.get("last_plan")             # 上次生成的 plan
+    det_plan = state.pop("_deterministic_plan", None)  # 确定性补丁 plan（零 LLM 路径）
 
     def generate():
         from agent.llm import stream_generate_plan
         from engine.plan_generator import _ultimate_fallback
 
-        try:
+        # ── 确定性补丁路径：直接使用预 patched plan，跳过 LLM ──
+        if det_plan is not None:
+            print(f"[ChatStream] 确定性补丁路径，跳过LLM: phases={len(det_plan.get('activity_content',[]))}")
+            plan = det_plan
+        else:
             full_text = ""
-            for event in stream_generate_plan(topic, participants, temp=temperature,
-                                               active_intents=active_intents,
-                                               anchors=anchors, last_plan=last_plan):
-                if event["type"] == "chunk":
-                    full_text = event["full"]
-                    yield f"data: {json.dumps({'type': 'chunk', 'text': event['text']})}\n\n"
-                elif event["type"] == "done":
-                    full_text = event["text"]
-                    break
-
             try:
-                plan = parse_plan_response(full_text)
-                print(f"[ChatStream] Plan 解析成功, phases={len(plan.get('activity_content',[]))}, "
-                      f"materials={len(plan.get('activity_materials',[]))}, "
-                      f"purpose_len={len(plan.get('activity_purpose',''))}")
-            except Exception as parse_e:
-                # 打印 full_text 的头尾各 200 字符，方便排查 LLM 输出了什么
-                head = full_text[:200] if full_text else "(empty)"
-                tail = full_text[-200:] if full_text and len(full_text) > 200 else ""
-                print(f"[ChatStream] 解析LLM响应失败: {parse_e}")
-                print(f"[ChatStream] full_text 头: {head}")
-                if tail:
-                    print(f"[ChatStream] full_text 尾: {tail}")
+                for event in stream_generate_plan(topic, participants, temp=temperature,
+                                                   active_intents=active_intents,
+                                                   anchors=anchors, last_plan=last_plan):
+                    if event["type"] == "chunk":
+                        full_text = event["full"]
+                        yield f"data: {json.dumps({'type': 'chunk', 'text': event['text']})}\n\n"
+                    elif event["type"] == "done":
+                        full_text = event["text"]
+                        break
+
+                try:
+                    plan = parse_plan_response(full_text)
+                    print(f"[ChatStream] Plan 解析成功, phases={len(plan.get('activity_content',[]))}, "
+                          f"materials={len(plan.get('activity_materials',[]))}, "
+                          f"purpose_len={len(plan.get('activity_purpose',''))}")
+                except Exception as parse_e:
+                    head = full_text[:200] if full_text else "(empty)"
+                    tail = full_text[-200:] if full_text and len(full_text) > 200 else ""
+                    print(f"[ChatStream] 解析LLM响应失败: {parse_e}")
+                    print(f"[ChatStream] full_text 头: {head}")
+                    if tail:
+                        print(f"[ChatStream] full_text 尾: {tail}")
+                    plan = _ultimate_fallback(topic, participants)
+                    print(f"[ChatStream] 使用兜底方案, phases={len(plan.get('activity_content',[]))}")
+            except Exception as stream_e:
+                print(f"[ChatStream] LLM流式调用失败，使用兜底方案: {stream_e}")
                 plan = _ultimate_fallback(topic, participants)
-                print(f"[ChatStream] 使用兜底方案, phases={len(plan.get('activity_content',[]))}")
-        except Exception as stream_e:
-            # LLM 流式调用失败（网络/API 错误）→ 降级为兜底方案
-            print(f"[ChatStream] LLM流式调用失败，使用兜底方案: {stream_e}")
-            full_text = ""
-            plan = _ultimate_fallback(topic, participants)
 
         try:
             # 场地路由：电竞→机房区，体育→体育区，其他→E教学楼

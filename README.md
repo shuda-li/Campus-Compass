@@ -55,14 +55,18 @@ UI：玻璃拟态面板、深空背景、星云紫 + 琥珀金配色、聚焦白
 
 ## 技术栈
 
-| 层 | 技术 |
-|------|------|
-| 后端 | Python 3.12 + Flask |
-| 前端 | 原生 HTML/CSS/JS + TailwindCSS CDN + Font Awesome 4 |
-| AI | DeepSeek API (deepseek-chat) |
-| 数据库 | SQLite |
-| 文档导出 | python-docx |
-| 记忆 | L1(dict) + L2(SQLite) + L3(JSON) |
+| 层 | 技术 | 说明 |
+|------|------|------|
+| **语言** | Python 3.12+ | — |
+| **后端框架** | Flask 3.x | RESTful API + SSE 流式响应 |
+| **前端** | 原生 HTML/CSS/JS + TailwindCSS CDN + Font Awesome 4 | Star Rail 星穹铁道主题 |
+| **AI 引擎** | DeepSeek API (deepseek-chat) | OpenAI 兼容协议，前缀缓存友好 |
+| **Agent 架构** | ReAct Agent | Thought → Action → Observation 闭环，Circuit Breaker 防死循环 |
+| **数据库** | SQLite 3 | 教室数据、会话历史持久化 |
+| **记忆系统** | L1(dict) + L2(SQLite) + L3(JSON) | 三级分层：会话→持久化→长期偏好 |
+| **MCP 工具** | Tavily Search API + DeepSeek 兜底 | 实时联网搜索，连接失败自动降级到 LLM 知识 |
+| **Skills 系统** | Markdown SKILL.md × 6 | 关键词匹配 + LLM 语义兜底分类 |
+| **文档导出** | python-docx + lxml | Word .docx 导出，保持主题配色 |
 
 ---
 
@@ -83,7 +87,7 @@ campus-compass/
 │   ├── harness/             #   驾驭层
 │   │   └── observ.py        #     结构化 Trace
 │   ├── mcp/                 #   MCP 工具
-│   │   └── tavily_search.py #     LLM 搜索（替代 Tavily API）
+│   │   └── tavily_search.py #     Tavily 搜索 + DeepSeek 降级
 │   ├── memory/              #   记忆系统
 │   │   ├── session.py       #     L1+L2 记忆
 │   │   ├── persistence.py   #     L3 长期记忆
@@ -139,6 +143,17 @@ campus-compass/
 
 ## 快速开始
 
+### 环境依赖
+
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| Python | ≥ 3.12 | 运行环境 |
+| Flask | ≥ 3.0 | Web 框架 |
+| requests | ≥ 2.28 | HTTP 客户端（API 调用） |
+| python-dotenv | ≥ 1.0 | `.env` 环境变量加载 |
+| python-docx | ≥ 1.0 | Word 文档导出 |
+| lxml | ≥ 5.0 | XML/HTML 解析 |
+
 ### 一条命令启动
 
 ```bash
@@ -147,26 +162,135 @@ python run.py
 
 自动完成：依赖检查 → 安装缺失 → 启动 Flask → 打开浏览器。
 
-### 或手动启动
+### 手动启动
 
 ```bash
+# 1. 创建虚拟环境（推荐）
+python -m venv .venv
+# Windows:
+.venv\Scripts\activate
+# macOS/Linux:
+source .venv/bin/activate
+
+# 2. 安装依赖
 pip install -r requirements.txt
-cp .env.example .env    # 编辑 .env 填入 DeepSeek API Key
+
+# 3. 配置环境变量
+cp .env.example .env
+# 编辑 .env，至少填入 LLM_API_KEY
+
+# 4. 启动
 python web/app.py
 ```
 
 浏览器打开 `http://localhost:5000`
 
-### 环境变量
+## 项目配置
 
-```env
-# DeepSeek API（必需）
-LLM_API_KEY=sk-your-deepseek-key-here
-LLM_API_URL=https://api.deepseek.com/v1/chat/completions
-LLM_MODEL=deepseek-chat
+项目通过 **`.env` 环境变量文件** + **`config.py`** 统一管理配置。
+
+### 环境变量（`.env`）
+
+复制 `.env.example` 并填入实际值：
+
+```bash
+cp .env.example .env
 ```
 
-OpenAI 兼容的 API 也可用，修改 `LLM_API_URL` 和 `LLM_MODEL` 即可。
+| 变量 | 必需 | 说明 | 示例 |
+|------|:--:|------|------|
+| `LLM_API_KEY` | ✅ | DeepSeek / OpenAI API Key | `sk-your-key-here` |
+| `LLM_API_URL` | — | LLM API 地址（OpenAI 兼容协议） | `https://api.deepseek.com/v1/chat/completions` |
+| `LLM_MODEL` | — | 模型名称 | `deepseek-chat` |
+| `TAVILY_API_KEY` | — | Tavily 搜索 API Key（可选，不配则自动降级到 LLM 知识兜底） | `tvly-dev-xxx` |
+
+> **注意**：`LLM_API_KEY` 如果不配置，Agent 将无法调用 LLM，只能使用确定性流水线模式（功能严重受限）。
+
+### config.py
+
+`config.py` 负责从 `.env` 读取全部环境变量，并导出以下常量供其他模块使用：
+
+```python
+LLM_API_KEY      # DeepSeek/OpenAI API Key
+LLM_API_URL      # API 端点 URL
+LLM_MODEL        # 模型名称
+TAVILY_API_KEY   # Tavily 搜索 Key
+DB_PATH          # SQLite 数据库路径 (data/rooms.db)
+TEMPLATE_PATH    # 活动模板路径 (data/templates.json)
+```
+
+### 兼容 OpenAI / 其他 API
+
+本项目默认使用 DeepSeek API，但任何兼容 OpenAI 协议的 API 均可用。修改 `.env` 即可切换：
+
+```env
+# 示例：切换到 OpenAI
+LLM_API_KEY=sk-your-openai-key
+LLM_API_URL=https://api.openai.com/v1/chat/completions
+LLM_MODEL=gpt-3.5-turbo
+```
+
+---
+
+## 部署方式
+
+### 开发环境（本地调试）
+
+```bash
+python run.py
+# 或
+python web/app.py
+```
+
+Flask 内置服务器，`http://localhost:5000`，仅适合开发和单用户测试。
+
+### 生产环境（推荐）
+
+使用 **Gunicorn** 作为 WSGI 服务器：
+
+```bash
+# 安装 Gunicorn
+pip install gunicorn
+
+# 启动（4 个 worker 进程，监听 5000 端口）
+gunicorn -w 4 -b 0.0.0.0:5000 web.app:app
+```
+
+配合 Nginx 反向代理：
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_buffering off;          # SSE 流式响应需要关闭缓冲
+        proxy_cache off;
+    }
+}
+```
+
+> ⚠️ SSE 流式输出依赖 `proxy_buffering off`，否则方案生成会变成一次性返回而非实时流式。
+
+### Docker（可选）
+
+```dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+EXPOSE 5000
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "web.app:app"]
+```
+
+```bash
+docker build -t campus-compass .
+docker run -p 5000:5000 --env-file .env campus-compass
+```
 
 ---
 

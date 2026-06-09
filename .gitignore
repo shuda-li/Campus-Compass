@@ -1,10 +1,31 @@
+# ── Python ──
 venv/
 __pycache__/
 *.pyc
-.env
 *.db
+
+# ── 密钥（绝对不能提交）──
+.env
+
+# ── 系统文件 ──
 .DS_Store
+Thumbs.db
+
+# ── IDE / 编辑器 ──
+.vscode/
+.idea/
+
+# ── 工具内部数据 ──
 .memory/
 .traces/
 .codegraph/
-.env
+.reasonix/
+.claude/
+
+# ── 学习材料 / 临时文件 ──
+Learning/
+test_deepseek.py
+test_mcp.py
+test_qwen.py
+temp_original_workflow.md
+Campus-Compass-完整工作流文档.md

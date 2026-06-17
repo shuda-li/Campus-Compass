@@ -126,18 +126,23 @@ def _detect_topic_switch(current_topic: str, new_input: str) -> bool:
 
         # 判定规则：
         # A) 跨技能异类词 ≥2 → 强烈信号（如 篮球+比赛 → 运动类）
-        # B) 跨技能异类词 ≥1 且当前技能命中 = 0 且异类词长度≥3 → 主题无关
-        #    （排除"分享""讨论"等短词误判；"摄影展"长度=3 可触发）
+        # B) 跨技能异类词 ≥1 且当前技能命中 = 0 → 主题无关
+        #    （阈值：非修改命令 ≥2 字捕获"讲座""篮球"，修改命令 ≥3 字防"讨论"误判）
         # C) 同技能内新关键词 ≥1 → Python→Java 类切换
         if cross_alien_count >= 2:
             return True
-        # 重新计算：只计长度≥3的异类词（避免"分享""讨论"等常见短词误判）
+        # 重新计算异类词：如果输入不像修改命令，用 ≥2 字阈值（捕获"讲座""篮球"等短词）；
+        # 如果像修改命令，用 ≥3 字阈值（避免"分享""讨论"等常见短词误判）
+        if _looks_like_modification(new_input):
+            min_alien_len = 3
+        else:
+            min_alien_len = 2
         long_alien_count = 0
         for name, skill in available.items():
             if name == current_skill_name:
                 continue
             for kw in skill.get("keywords", []):
-                if kw in new_input and kw not in current_kw_hits and len(kw) >= 3:
+                if kw in new_input and kw not in current_kw_hits and len(kw) >= min_alien_len:
                     long_alien_count += 1
         if long_alien_count >= 1 and current_hit_count == 0:
             return True
@@ -403,7 +408,7 @@ def _extract_participants(text: str) -> int:
     # 规则2+3：提取所有数字及其上下文，过滤日期
     for m in re.finditer(r"(\d+)", text):
         num = int(m.group(1))
-        if num > 500:  # 不可能的活动人数
+        if num > 10000:  # 超出合理范围的活动人数（含体育馆3000人场景）
             continue
         # 检查数字后紧跟的字符
         after = text[m.end():m.end() + 2]
@@ -463,6 +468,132 @@ def proxy_test():
     from agent.proxy import validate
     ok, msg = validate(address)
     return jsonify({"success": ok, "message": msg})
+
+
+@app.route("/api/llm/status")
+def llm_status():
+    """返回当前 API Key 配置状态。"""
+    from config import LLM_API_KEY as current_key
+    has_key = bool(current_key)
+    # 显示末4位以便用户确认
+    hint = ""
+    if has_key and len(current_key) > 4:
+        hint = "···" + current_key[-4:]
+    return jsonify({
+        "configured": has_key,
+        "hint": hint,
+    })
+
+
+@app.route("/api/llm/config", methods=["POST"])
+def llm_config():
+    """将 API Key 持久化写入 .env 并重载配置。"""
+    data = request.get_json() or {}
+    api_key = data.get("api_key", "").strip()
+    api_url = data.get("api_url", "").strip()
+    api_model = data.get("api_model", "").strip()
+
+    if not api_key:
+        return jsonify({"success": False, "message": "API Key 不能为空"})
+
+    # 写入 .env
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    try:
+        lines = []
+        if os.path.exists(env_path):
+            with open(env_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+
+        updated = {"LLM_API_KEY": False, "LLM_API_URL": False, "LLM_MODEL": False}
+        for i, line in enumerate(lines):
+            for key in updated:
+                if line.startswith(f"{key}="):
+                    if key == "LLM_API_KEY":
+                        lines[i] = f"{key}={api_key}\n"
+                    elif key == "LLM_API_URL" and api_url:
+                        lines[i] = f"{key}={api_url}\n"
+                    elif key == "LLM_MODEL" and api_model:
+                        lines[i] = f"{key}={api_model}\n"
+                    updated[key] = True
+                    break
+
+        for key, done in updated.items():
+            if not done:
+                if key == "LLM_API_KEY":
+                    lines.append(f"\n{key}={api_key}\n")
+                elif key == "LLM_API_URL" and api_url:
+                    lines.append(f"\n{key}={api_url}\n")
+                elif key == "LLM_MODEL" and api_model:
+                    lines.append(f"\n{key}={api_model}\n")
+
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+
+        # 热重载配置
+        os.environ["LLM_API_KEY"] = api_key
+        import config
+        config.LLM_API_KEY = api_key
+        if api_url:
+            os.environ["LLM_API_URL"] = api_url
+            config.LLM_API_URL = api_url
+        if api_model:
+            os.environ["LLM_MODEL"] = api_model
+            config.LLM_MODEL = api_model
+
+        return jsonify({"success": True, "message": "API Key 已保存并生效"})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"写入 .env 失败: {str(e)}"})
+
+
+@app.route("/api/llm/test", methods=["POST"])
+def llm_test():
+    """用指定的 API Key 做一次最小连通性测试。"""
+    data = request.get_json() or {}
+    api_key = data.get("api_key", "").strip()
+    api_url = data.get("api_url", "").strip()
+
+    if not api_key:
+        # 使用当前配置的 key
+        from config import LLM_API_KEY as current_key, LLM_API_URL as current_url
+        api_key = current_key
+        api_url = current_url
+
+    if not api_key:
+        return jsonify({"success": False, "message": "请先输入 API Key"})
+
+    if not api_url:
+        api_url = "https://api.deepseek.com/v1/chat/completions"
+
+    try:
+        session = requests.Session()
+        session.trust_env = False
+        resp = session.post(
+            api_url,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "deepseek-chat",
+                "messages": [{"role": "user", "content": "Hi"}],
+                "max_tokens": 5,
+            },
+            timeout=15,
+        )
+        data_resp = resp.json()
+        if resp.status_code == 200 and "choices" in data_resp:
+            return jsonify({"success": True, "message": "连接成功——API Key 有效"})
+        elif resp.status_code == 401:
+            return jsonify({"success": False, "message": "认证失败——API Key 无效或已过期"})
+        else:
+            err_msg = data_resp.get("error", {}).get("message", resp.text[:100])
+            return jsonify({"success": False, "message": f"API 返回异常 (HTTP {resp.status_code}): {err_msg}"})
+    except requests.exceptions.Timeout:
+        return jsonify({"success": False, "message": "连接超时——请检查网络或代理设置"})
+    except requests.exceptions.ConnectionError as e:
+        return jsonify({"success": False, "message": f"连接失败——无法访问 API 服务器: {str(e)[:80]}"})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"测试异常: {str(e)[:120]}"})
 
 
 @app.route("/api/history")
@@ -615,6 +746,34 @@ def chat():
         if user_msg == "_stream_done_":
             return jsonify({"success": True, "session_id": sid, "stream_done": True})
 
+        # ── 重新生成命令：清除锚定和意图，强制全新生成 ──
+        if any(phrase in user_msg for phrase in [
+            "重新生成", "再生成", "再来一次", "再生产", "重新创建",
+            "重来一次", "再生成一次", "再生成一份",
+            "生成完整方案",
+        ]):
+            state["anchors"] = None
+            state["active_intents"] = None
+            state["last_plan"] = None       # 清除旧 plan，强制全新生成而非修改
+            state["step"] = "streaming"
+            _save_sessions(sessions)
+            return jsonify({
+                "success": True,
+                "session_id": sid,
+                "stream": True,
+                "topic": state.get("expanded_topic") or state.get("topic", ""),
+                "participants": state.get("participants", 30),
+            })
+
+        # ── 主题切换检测：已生成完整方案 → 拒绝新主题 ──
+        current_topic = state.get("expanded_topic") or state.get("topic", "")
+        if _detect_topic_switch(current_topic, user_msg):
+            return jsonify({
+                "reply": _topic_switch_warning() + _review_hint_html(current_topic),
+                "success": True,
+                "session_id": sid,
+            })
+
         # ── Phase 1: 关键词锚定（Plan-Aware）──
         from engine.plan_anchor import anchor_feedback, derive_intent_from_anchors
         last_plan = state.get("last_plan")
@@ -632,13 +791,16 @@ def chat():
         from engine.intent_detector import detect_intent
         general_intents = detect_intent(user_msg)
 
-        # 合并 intent：锚定优先，通用检测补充
-        merged_intents = anchor_intents.copy()
-        seen_types = {i["type"] for i in merged_intents}
+        # 合并 intent：通用检测优先（值更精确），锚定补充（定位 section）
+        merged_intents = []
+        seen_types = set()
         for gi in general_intents:
-            if gi["type"] not in seen_types:
-                merged_intents.append(gi)
-                seen_types.add(gi["type"])
+            merged_intents.append(gi)
+            seen_types.add(gi["type"])
+        for ai in anchor_intents:
+            if ai["type"] not in seen_types:
+                merged_intents.append(ai)
+                seen_types.add(ai["type"])
 
         if merged_intents:
             state["active_intents"] = merged_intents
@@ -676,20 +838,11 @@ def chat():
                     "participants": state["participants"],
                 })
 
-        # ── 单主题检测：锚定和意图都失败时才触发 ──
-        # 有锚定 → 确认是改进反馈；有意图 → 可能是改进
-        # 两者都没有 → 疑似换题，警告
+        # ── 兜底：无锚定、无意图、不像修改 → 疑似无意义输入 ──
         if not anchors and not merged_intents:
-            if _detect_topic_switch(state.get("expanded_topic") or state["topic"], user_msg):
-                return jsonify({
-                    "reply": _topic_switch_warning() + _review_hint_html(state["expanded_topic"] or state["topic"]),
-                    "success": True,
-                    "session_id": sid,
-                })
-            # P1-fix：也不像修改命令 → 同样警告换题，防止无信号输入穿透
             if not _looks_like_modification(user_msg):
                 return jsonify({
-                    "reply": _topic_switch_warning() + _review_hint_html(state["expanded_topic"] or state["topic"]),
+                    "reply": _topic_switch_warning() + _review_hint_html(state.get("expanded_topic") or state["topic"]),
                     "success": True,
                     "session_id": sid,
                 })
@@ -763,11 +916,22 @@ def chat_stream():
                     print(f"[ChatStream] full_text 头: {head}")
                     if tail:
                         print(f"[ChatStream] full_text 尾: {tail}")
-                    plan = _ultimate_fallback(topic, participants)
+                    # 尝试加载技能模板用于兜底
+                    try:
+                        from agent.skill_loader import match_skill
+                        _, matched = match_skill(topic)
+                    except Exception:
+                        matched = None
+                    plan = _ultimate_fallback(topic, participants, skill=matched)
                     print(f"[ChatStream] 使用兜底方案, phases={len(plan.get('activity_content',[]))}")
             except Exception as stream_e:
                 print(f"[ChatStream] LLM流式调用失败，使用兜底方案: {stream_e}")
-                plan = _ultimate_fallback(topic, participants)
+                try:
+                    from agent.skill_loader import match_skill
+                    _, matched = match_skill(topic)
+                except Exception:
+                    matched = None
+                plan = _ultimate_fallback(topic, participants, skill=matched)
 
         try:
             # 场地路由：电竞→机房区，体育→体育区，其他→E教学楼
@@ -796,6 +960,16 @@ def chat_stream():
 
             rooms = query_rooms(capacity_min=1, building=venue_building)
             sorted_rooms = select_best_rooms(rooms, participants) if rooms else []
+
+            # 兜底：E教学楼所有教室都装不下 → 降级到体育区（体育馆 3000 人）
+            if venue_building == "E教学楼" and sorted_rooms:
+                max_cap = max(r.get("capacity", 0) for r in sorted_rooms)
+                if max_cap < participants:
+                    fallback_rooms = query_rooms(capacity_min=1, building="体育区")
+                    if fallback_rooms:
+                        sorted_rooms = select_best_rooms(fallback_rooms, participants)
+                        venue_building = "体育区"
+
             intent = {"building": venue_building, "participants": participants}
 
             venue_html = _venue_recommend_html(sorted_rooms, participants)

@@ -90,11 +90,11 @@ def export_plan_to_docx(plan: dict, rooms: list = None) -> str:
     # ═══════════════════════════════════════
     title = plan.get("activity_topic", "活动策划方案")
     _add_styled_paragraph(doc, title, bold=True, size=Pt(22),
-                          color=NEBULA_PURPLE, alignment=WD_ALIGN_PARAGRAPH.CENTER,
+                          alignment=WD_ALIGN_PARAGRAPH.CENTER,
                           space_after=Pt(4))
 
     _add_styled_paragraph(doc, "Campus Compass · 校园活动策划方案", size=Pt(9),
-                          color=GRAY_TEXT, alignment=WD_ALIGN_PARAGRAPH.CENTER,
+                          alignment=WD_ALIGN_PARAGRAPH.CENTER,
                           space_after=Pt(16))
 
     # ── 分隔线 ──
@@ -117,15 +117,15 @@ def export_plan_to_docx(plan: dict, rooms: list = None) -> str:
     purpose = plan.get("activity_purpose", "")
     if purpose:
         _add_styled_paragraph(doc, "✦ 活动目的", bold=True, size=Pt(14),
-                              color=AMBER_GOLD, space_after=Pt(8))
-        _add_styled_paragraph(doc, purpose, size=Pt(11), color=WHITE_TEXT,
+                              space_after=Pt(8))
+        _add_styled_paragraph(doc, purpose, size=Pt(11),
                               space_after=Pt(14))
 
     # ═══════════════════════════════════════
     #  基本信息表
     # ═══════════════════════════════════════
     _add_styled_paragraph(doc, "✦ 基本信息", bold=True, size=Pt(14),
-                          color=AMBER_GOLD, space_after=Pt(8))
+                          space_after=Pt(8))
 
     info_table = doc.add_table(rows=3, cols=2, style='Table Grid')
     info_table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -143,8 +143,6 @@ def export_plan_to_docx(plan: dict, rooms: list = None) -> str:
         run_l = p_l.add_run(label)
         run_l.bold = True
         run_l.font.size = Pt(10)
-        run_l.font.color.rgb = AMBER_GOLD
-        _set_cell_shading(cell_l, RGBColor(0x11, 0x18, 0x33))
         p_l.paragraph_format.space_before = Pt(4)
         p_l.paragraph_format.space_after = Pt(4)
 
@@ -154,8 +152,6 @@ def export_plan_to_docx(plan: dict, rooms: list = None) -> str:
         p_v = cell_v.paragraphs[0]
         run_v = p_v.add_run(value)
         run_v.font.size = Pt(10)
-        run_v.font.color.rgb = WHITE_TEXT
-        _set_cell_shading(cell_v, RGBColor(0x11, 0x18, 0x33))
         p_v.paragraph_format.space_before = Pt(4)
         p_v.paragraph_format.space_after = Pt(4)
 
@@ -172,7 +168,7 @@ def export_plan_to_docx(plan: dict, rooms: list = None) -> str:
     content_list = plan.get("activity_content", [])
     if content_list:
         _add_styled_paragraph(doc, f"✦ 活动内容（{len(content_list)} 个环节）",
-                              bold=True, size=Pt(14), color=AMBER_GOLD, space_after=Pt(10))
+                              bold=True, size=Pt(14), space_after=Pt(10))
 
         for i, item in enumerate(content_list):
             phase = item.get("phase", f"环节 {i+1}")
@@ -186,19 +182,19 @@ def export_plan_to_docx(plan: dict, rooms: list = None) -> str:
             if duration:
                 header += f"（{duration}）"
             _add_styled_paragraph(doc, header, bold=True, size=Pt(11),
-                                  color=NEBULA_PURPLE, space_after=Pt(4))
+                                  space_after=Pt(4))
 
             if content_text:
                 _add_styled_paragraph(doc, content_text, size=Pt(10),
-                                      color=WHITE_TEXT, space_after=Pt(4))
+                                      space_after=Pt(4))
 
             if host_guide:
                 _add_styled_paragraph(doc, f"✦ 引导语：{host_guide}", size=Pt(9),
-                                      color=AMBER_GOLD, space_after=Pt(2))
+                                      space_after=Pt(2))
 
             if interaction:
                 _add_styled_paragraph(doc, f"互动方式：{interaction}", size=Pt(9),
-                                      color=GRAY_TEXT, space_after=Pt(10))
+                                      space_after=Pt(10))
 
     # ═══════════════════════════════════════
     #  活动物资
@@ -206,7 +202,7 @@ def export_plan_to_docx(plan: dict, rooms: list = None) -> str:
     materials = plan.get("activity_materials", [])
     if materials:
         _add_styled_paragraph(doc, f"✦ 活动物资（{len(materials)} 项）",
-                              bold=True, size=Pt(14), color=AMBER_GOLD, space_after=Pt(8))
+                              bold=True, size=Pt(14), space_after=Pt(8))
 
         mat_table = doc.add_table(rows=len(materials), cols=3, style='Table Grid')
         mat_table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -219,8 +215,6 @@ def export_plan_to_docx(plan: dict, rooms: list = None) -> str:
             run = p.add_run(header)
             run.bold = True
             run.font.size = Pt(9)
-            run.font.color.rgb = AMBER_GOLD
-            _set_cell_shading(cell, RGBColor(0x11, 0x18, 0x33))
             p.paragraph_format.space_before = Pt(3)
             p.paragraph_format.space_after = Pt(3)
 
@@ -231,8 +225,6 @@ def export_plan_to_docx(plan: dict, rooms: list = None) -> str:
                 p = cell.paragraphs[0]
                 run = p.add_run(str(m.get(key, "")))
                 run.font.size = Pt(9)
-                run.font.color.rgb = WHITE_TEXT
-                _set_cell_shading(cell, RGBColor(0x11, 0x18, 0x33))
                 p.paragraph_format.space_before = Pt(3)
                 p.paragraph_format.space_after = Pt(3)
 
@@ -246,7 +238,7 @@ def export_plan_to_docx(plan: dict, rooms: list = None) -> str:
     # ═══════════════════════════════════════
     if rooms:
         _add_styled_paragraph(doc, f"✦ 推荐教室（{len(rooms)} 间可选）",
-                              bold=True, size=Pt(14), color=AMBER_GOLD, space_after=Pt(8))
+                              bold=True, size=Pt(14), space_after=Pt(8))
 
         for i, room in enumerate(rooms[:3]):
             rid = room.get("room_id", "?")
@@ -265,7 +257,7 @@ def export_plan_to_docx(plan: dict, rooms: list = None) -> str:
             line = f"{rank_mark} {rid} · {building}  |  {cap}人"
             if equip_str:
                 line += f"  |  {equip_str}"
-            _add_styled_paragraph(doc, line, size=Pt(10), color=WHITE_TEXT,
+            _add_styled_paragraph(doc, line, size=Pt(10),
                                   space_after=Pt(4))
 
     # ── 结尾 ──
@@ -274,7 +266,6 @@ def export_plan_to_docx(plan: dict, rooms: list = None) -> str:
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = p.add_run("— Campus Compass 智能活动策划助手 —")
     run.font.size = Pt(8)
-    run.font.color.rgb = GRAY_TEXT
     run.italic = True
 
     # ── 保存到临时文件 ──

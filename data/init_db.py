@@ -115,7 +115,7 @@ def init_database(db_path: str = None):
          99, 1010),
 
         # ── 体育场馆（不在 E 教学楼内，独立场地）──
-        ("体育馆", "体育区", 0, 300, 600.0,
+        ("体育馆", "体育区", 0, 3000, 2000.0,
          json.dumps(["室内", "篮球场", "羽毛球", "舞台", "音响", "空调"], ensure_ascii=False),
          "", json.dumps([], ensure_ascii=False),
          900, 500),

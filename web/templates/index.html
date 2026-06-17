@@ -327,6 +327,13 @@
                         <span id="proxyStatusDot"
                             class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-void bg-greenOk shadow-[0_0_4px_rgba(74,222,128,0.5)]"></span>
                     </button>
+                    <button id="apiKeyToggleBtn" onclick="toggleApiKeyPanel()"
+                        class="relative w-8 h-8 bg-voidHover border border-voidBorder rounded-lg flex items-center justify-center hover:border-nebula/30 hover:shadow-[0_0_10px_rgba(139,92,246,0.2)] transition-all group"
+                        title="API Key 设置" aria-label="API Key 设置">
+                        <i class="fa fa-key text-stardust text-sm group-hover:text-nebula transition-colors"></i>
+                        <span id="apiKeyStatusDot"
+                            class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-void bg-redErr shadow-[0_0_4px_rgba(248,113,113,0.5)]"></span>
+                    </button>
                     <span class="text-xs text-amber bg-amberMuted px-3 py-1 rounded-full border border-goldBorder">✦ AI 驱动 · 实时流式</span>
                 </div>
             </header>
@@ -490,6 +497,57 @@
     </div>
 
     <div id="proxyOverlay" class="hidden fixed inset-0 z-40" onclick="toggleProxyPanel()"></div>
+
+    <!-- API Key 设置面板 -->
+    <div id="apiKeyPanel" class="hidden fixed top-16 right-6 z-50 animate-slide-in">
+        <div class="glass-panel-strong rounded-2xl p-5 w-80 shadow-2xl shadow-black/40">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-2">
+                    <i class="fa fa-key text-nebula"></i>
+                    <span class="text-sm font-semibold text-starlight">API Key 设置</span>
+                </div>
+                <button onclick="toggleApiKeyPanel()" class="text-stardust hover:text-starlight" title="关闭" aria-label="关闭 API Key 设置">
+                    <i class="fa fa-times" aria-hidden="true"></i>
+                </button>
+            </div>
+
+            <div class="mb-3">
+                <label class="text-xs text-stardust block mb-1.5">DeepSeek API Key</label>
+                <div class="flex gap-2">
+                    <input type="password" id="apiKeyInput" aria-label="API Key"
+                        class="flex-1 bg-voidInput border border-voidBorder rounded-lg px-3 py-2 text-xs text-starlight outline-none focus:border-nebula/40 focus:shadow-[0_0_8px_rgba(139,92,246,0.15)] transition-all placeholder:text-stardust"
+                        placeholder="sk-···">
+                    <button onclick="toggleApiKeyVisibility()"
+                        class="px-2 py-2 bg-voidHover border border-voidBorder rounded-lg text-xs text-stardust hover:border-nebula/30 transition-all"
+                        id="apiKeyEyeBtn" title="显示/隐藏">
+                        <i class="fa fa-eye" id="apiKeyEyeIcon"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex gap-2 mb-3">
+                <button onclick="testApiKey()"
+                    class="flex-1 py-2 bg-voidHover border border-voidBorder rounded-lg text-xs text-stardust hover:border-nebula/30 hover:text-nebula transition-all"
+                    id="testApiKeyBtn">
+                    <span id="testApiKeyText">测试连接</span>
+                    <span id="testApiKeySpinner" class="hidden"><i class="fa fa-spinner fa-spin"></i></span>
+                </button>
+                <button onclick="saveApiKey()"
+                    class="flex-1 py-2 bg-nebulaMuted border border-voidBorder text-nebula text-xs rounded-lg hover:bg-nebula/15 hover:shadow-[0_0_10px_rgba(139,92,246,0.15)] transition-all">
+                    保存配置
+                </button>
+            </div>
+
+            <div id="apiKeyMsg" class="text-xs mb-1 min-h-[20px] hidden"></div>
+
+            <div class="flex items-center gap-2 text-[10px] text-stardust/60">
+                <i class="fa fa-info-circle"></i>
+                <span>Key 仅保存在本地 .env 文件，不会上传</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="apiKeyOverlay" class="hidden fixed inset-0 z-40" onclick="toggleApiKeyPanel()"></div>
 
     <!-- 主题设置面板 -->
     <div id="themePanel" class="hidden fixed top-16 right-6 z-50 animate-slide-in">
@@ -672,6 +730,151 @@
             if (e.key === "Enter") saveProxy();
         });
         loadProxyConfig();
+
+        // ===== API Key 设置 =====
+        let apiKeyValue = "";
+        let apiKeyPanelOpen = false;
+
+        function loadApiKeyConfig() {
+            const saved = localStorage.getItem("campus_compass_apikey");
+            if (saved) {
+                try {
+                    const cfg = JSON.parse(saved);
+                    apiKeyValue = cfg.key || "";
+                } catch (e) {}
+            }
+            if (apiKeyValue) {
+                document.getElementById("apiKeyInput").value = apiKeyValue;
+            }
+            fetchApiKeyStatus();
+        }
+
+        function saveApiKeyToStorage() {
+            localStorage.setItem("campus_compass_apikey", JSON.stringify({
+                key: apiKeyValue,
+            }));
+        }
+
+        async function fetchApiKeyStatus() {
+            try {
+                const r = await fetch("/api/llm/status");
+                const d = await r.json();
+                if (d.configured) {
+                    // 已配置 → 绿色
+                    if (!apiKeyValue) {
+                        // 从服务器获取 hint 显示
+                        document.getElementById("apiKeyInput").placeholder =
+                            d.hint || "已配置（隐藏）";
+                    }
+                }
+                updateApiKeyStatusDot(d.configured);
+            } catch (e) {
+                updateApiKeyStatusDot(false);
+            }
+        }
+
+        function updateApiKeyStatusDot(configured) {
+            const dot = document.getElementById("apiKeyStatusDot");
+            if (configured || apiKeyValue) {
+                dot.className =
+                    "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-void bg-greenOk shadow-[0_0_4px_rgba(74,222,128,0.5)]";
+            } else {
+                dot.className =
+                    "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-void bg-redErr shadow-[0_0_4px_rgba(248,113,113,0.5)]";
+            }
+        }
+
+        function showApiKeyMsg(text, type) {
+            const el = document.getElementById("apiKeyMsg");
+            el.classList.remove("hidden");
+            const colors = {
+                success: "text-greenOk",
+                error: "text-redErr",
+                info: "text-stardust",
+                warning: "text-amberWarn",
+            };
+            el.className = "text-xs mb-1 min-h-[20px] " + (colors[type] || "text-stardust");
+            el.textContent = text;
+        }
+
+        function toggleApiKeyPanel() {
+            apiKeyPanelOpen = !apiKeyPanelOpen;
+            document.getElementById("apiKeyPanel").classList.toggle("hidden", !apiKeyPanelOpen);
+            document.getElementById("apiKeyOverlay").classList.toggle("hidden", !apiKeyPanelOpen);
+            if (apiKeyPanelOpen) {
+                if (proxyPanelOpen) toggleProxyPanel();
+                if (themePanelOpen) toggleThemePanel();
+                document.getElementById("apiKeyInput").focus();
+            }
+        }
+
+        function toggleApiKeyVisibility() {
+            const input = document.getElementById("apiKeyInput");
+            const icon = document.getElementById("apiKeyEyeIcon");
+            if (input.type === "password") {
+                input.type = "text";
+                icon.className = "fa fa-eye-slash";
+            } else {
+                input.type = "password";
+                icon.className = "fa fa-eye";
+            }
+        }
+
+        async function testApiKey() {
+            const key = document.getElementById("apiKeyInput").value.trim();
+            if (!key) { showApiKeyMsg("请先输入 API Key", "error"); return; }
+            const testBtn = document.getElementById("testApiKeyBtn");
+            const testText = document.getElementById("testApiKeyText");
+            const testSpinner = document.getElementById("testApiKeySpinner");
+            testBtn.disabled = true;
+            testText.classList.add("hidden");
+            testSpinner.classList.remove("hidden");
+            showApiKeyMsg("正在连接 DeepSeek API...", "info");
+            try {
+                const r = await fetch("/api/llm/test", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ api_key: key }),
+                });
+                const d = await r.json();
+                showApiKeyMsg(d.message, d.success ? "success" : "error");
+            } catch (e) {
+                showApiKeyMsg("网络请求失败——请确认服务已启动", "error");
+            } finally {
+                testBtn.disabled = false;
+                testText.classList.remove("hidden");
+                testSpinner.classList.add("hidden");
+            }
+        }
+
+        async function saveApiKey() {
+            apiKeyValue = document.getElementById("apiKeyInput").value.trim();
+            if (!apiKeyValue) { showApiKeyMsg("请先输入 API Key", "error"); return; }
+            saveApiKeyToStorage();
+            updateApiKeyStatusDot(true);
+            showApiKeyMsg("正在保存...", "info");
+            try {
+                const r = await fetch("/api/llm/config", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ api_key: apiKeyValue }),
+                });
+                const d = await r.json();
+                if (d.success) {
+                    showApiKeyMsg("API Key 已保存至 .env 并生效", "success");
+                    setTimeout(() => toggleApiKeyPanel(), 1000);
+                } else {
+                    showApiKeyMsg(d.message, "error");
+                }
+            } catch (e) {
+                showApiKeyMsg("保存失败——请确认服务已启动", "error");
+            }
+        }
+
+        document.getElementById("apiKeyInput").addEventListener("keydown", function(e) {
+            if (e.key === "Enter") saveApiKey();
+        });
+        loadApiKeyConfig();
 
         // ===== 主题设置 =====
         let currentTheme = 'night';

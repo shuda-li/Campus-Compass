@@ -334,21 +334,48 @@ def build_plan_prompt(topic: str, participants: int, search_knowledge: dict = No
 def parse_plan_response(content: str) -> dict:
     content = content.strip()
 
-    # Clean markdown code fences: ```json ... ```
+    # ── 清理 markdown code fences（支持前导/后置文本）──
     TRIPLE_BACKTICK = chr(96) + chr(96) + chr(96)
-    if content.startswith(TRIPLE_BACKTICK):
-        lines = content.split(chr(10))
-        content = chr(10).join(lines[1:]) if len(lines) > 1 else content
-        if content.rstrip().endswith(TRIPLE_BACKTICK):
-            content = content[: content.rstrip().rfind(TRIPLE_BACKTICK)]
+    # 找到 ```json 或 ``` 代码块
+    fence_start = content.find(TRIPLE_BACKTICK)
+    if fence_start != -1:
+        # 跳过 ```json / ``` 行
+        line_end = content.find(chr(10), fence_start)
+        if line_end == -1:
+            line_end = len(content)
+        fence_end = content.find(TRIPLE_BACKTICK, line_end)
+        if fence_end != -1:
+            content = content[line_end:fence_end]
+            content = content.strip()
+
+    # ── 提取 JSON 对象 ──
+    # 策略：找到第一个 { 作为起点，反向查找最后一个 } 确保匹配
+    start_brace = content.find(chr(123))
+    if start_brace == -1:
+        raise ValueError("No JSON object found in LLM response")
+    
+    # 从 start_brace 开始，逐层匹配大括号找到完整的顶层对象
+    depth = 0
+    end_pos = -1
+    for i in range(start_brace, len(content)):
+        ch = content[i]
+        if ch == chr(123):
+            depth += 1
+        elif ch == chr(125):
+            depth -= 1
+            if depth == 0:
+                end_pos = i
+                break
+    
+    if end_pos != -1:
+        content = content[start_brace:end_pos + 1]
+    else:
+        # 回退：取第一个 { 到最后一个 }
+        end_brace = content.rfind(chr(125))
+        if end_brace != -1 and end_brace > start_brace:
+            content = content[start_brace:end_brace + 1]
 
     content = content.strip()
-
-    # Extract JSON object between first { and last }
-    start_brace = content.find(chr(123))
-    end_brace = content.rfind(chr(125))
-    if start_brace != -1 and end_brace != -1 and end_brace > start_brace:
-        content = content[start_brace:end_brace + 1]
 
     # Attempt 1: direct parse
     try:
@@ -378,7 +405,18 @@ def parse_plan_response(content: str) -> dict:
     except json.JSONDecodeError as e:
         print(f"[PlanGen] smart quote fix failed: {e}")
 
-    raise ValueError("Cannot parse LLM JSON, content head: " + content[:100])
+    # Attempt 4: 修复常见 LLM 错误 — 字符串值中的未转义换行
+    try:
+        import re
+        fixed = re.sub(r'(?<=": ")(.*?)(?=")', 
+                       lambda m: m.group(1).replace('\n', '\\n').replace('\r', ''), 
+                       content, flags=re.DOTALL)
+        if fixed != content:
+            return json.loads(fixed)
+    except (json.JSONDecodeError, Exception) as e:
+        print(f"[PlanGen] newline escape fix failed: {e}")
+
+    raise ValueError("Cannot parse LLM JSON, content head: " + content[:150])
 
 
 def call_llm_for_plan(topic: str, participants: int, api_key: str, api_url: str, model: str, search_knowledge: dict = None) -> dict:

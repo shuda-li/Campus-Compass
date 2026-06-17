@@ -50,9 +50,22 @@ def parse_intent(user_input: str) -> dict:
                 intent["activity_type"] = atype
                 break
 
-    num_match = re.search(r"(\d+)\s*人", text)
+    num_match = re.search(r"(\d+)\s*(人|位|名)", text)
     if num_match:
         intent["participants"] = int(num_match.group(1))
+    else:
+        # 回退：尝试匹配纯数字（过滤日期/时间上下文）
+        for m in re.finditer(r"(\d+)", text):
+            num = int(m.group(1))
+            if num > 10000:
+                continue
+            after = text[m.end():m.end() + 2]
+            if after and after[0] in "年月日号点时秒分":
+                continue
+            if after and after[:2] in ["年", "月", "日"]:
+                continue
+            intent["participants"] = num
+            break
 
     bld_match = re.search(r"([A-Za-z]+座)", text)
     if bld_match:

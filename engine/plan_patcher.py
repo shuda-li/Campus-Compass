@@ -30,6 +30,8 @@ _VALUE_EXTRACTORS = {
         (r'(?:改为|改成|换成|变更为|修改为|调整为|改成|变更成)\s*(\d{1,2})\s*[年\-\/]\s*(\d{1,2})\s*[月\-\/]\s*(\d{1,2})\s*[号日]?', "date"),
         # "改成2027-02-03"
         (r'(?:改为|改成|换成|变更为|修改为)\s*(\d{4}[年\-\/]\d{1,2}[月\-\/]\d{1,2}[号日]?)', 1),
+        # "改成10月9号" — 月日格式，无年份
+        (r'(?:时间\s*)?(?:改为|改成|换成|变更为|修改为|调整为|改到|换到)\s*(\d{1,2})\s*月\s*(\d{1,2})\s*[号日]?', "month_day"),
         # "把时间改成明天下午3点" — 太模糊，跳过
     ],
     "organizer": [
@@ -57,13 +59,12 @@ DETERMINISTIC_FIELDS = {
 }
 
 
-def _normalize_date(raw: str) -> str:
-    """将各种日期格式统一为 'YYYY年MM月DD日'。"""
-    # 匹配 "27年2月3号"
+def _normalize_date(raw: str) -> Optional[str]:
+    """将各种日期格式统一为 'YYYY年MM月DD日'。非日期输入返回 None。"""
+    # 匹配 "27年2月3号" 或 "2月3号"
     m = re.match(r'(\d{1,2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*[号日]?', raw)
     if m:
         y, mth, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        # 2 位年份 → 加 2000
         if y < 100:
             y += 2000
         return f"{y}年{mth}月{d}日"
@@ -73,7 +74,8 @@ def _normalize_date(raw: str) -> str:
     if m:
         return f"{int(m.group(1))}年{int(m.group(2))}月{int(m.group(3))}日"
 
-    return raw.strip()
+    # 不匹配任何已知日期格式 → 无法确定性提取
+    return None
 
 
 def _normalize_org_name(raw: str) -> str:
@@ -104,6 +106,16 @@ def _extract_by_type(user_msg: str, field_type: str, anchor_value: str = None) -
                 y, mth, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
                 if y < 100:
                     y += 2000
+                return f"{y}年{mth}月{d}日"
+            except (ValueError, IndexError):
+                continue
+        elif group == "month_day":
+            # 2 组月日匹配（无年份，自动推断）
+            try:
+                mth, d = int(m.group(1)), int(m.group(2))
+                y = datetime.now().year
+                if mth < datetime.now().month:
+                    y += 1
                 return f"{y}年{mth}月{d}日"
             except (ValueError, IndexError):
                 continue

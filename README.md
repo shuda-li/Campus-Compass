@@ -45,6 +45,7 @@ UI：玻璃拟态面板、深空背景、星云紫 + 琥珀金配色、聚焦白
 - **创意度滑块**：0.3~1.2 可调温度
 - **聚焦白光环**：输入框聚焦时白辉光晕
 - **API Key 面板**：在页面头部直接输入/测试/保存 DeepSeek Key，自动写入 .env 并热重载
+- **自定义模板导入**：支持上传 .docx / .md 策划书模板，LLM 按模板结构生成方案
 - **一键导出 Word**：完整方案导出为 .docx，纯黑文字清晰打印
 
 ### 记忆系统
@@ -102,6 +103,7 @@ campus-compass/
 │   ├── plan_generator.py    #   方案生成 prompt + JSON 解析（3层兜底）
 │   ├── plan_patcher.py     #   确定性补丁引擎：时间/人数/场地瞬间修改
 │   ├── plan_anchor.py       #   Plan-Aware 关键词锚定（倒排索引+反向匹配）
+│   ├── template_parser.py   #   模板解析器：docx/md 结构骨架提取
 │   ├── intent_detector.py   #   通用修改意图检测（5类型×3层漏斗）
 │   ├── time_intent.py       #   时间变更检测（15关键词+9正则+学习）
 │   ├── intent_parser.py     #   意图解析

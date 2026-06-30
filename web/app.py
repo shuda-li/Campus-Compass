@@ -596,6 +596,80 @@ def llm_test():
         return jsonify({"success": False, "message": f"测试异常: {str(e)[:120]}"})
 
 
+# ── 用户模板上传/管理 ──
+TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+TEMPLATE_FILE = os.path.join(TEMPLATE_DIR, "user_template")  # 无扩展名，运行时补
+TEMPLATE_JSON = os.path.join(TEMPLATE_DIR, "user_template.json")
+
+ALLOWED_EXTENSIONS = {".docx", ".md", ".markdown", ".txt"}
+
+
+def _get_template_status() -> dict:
+    """返回当前用户模板状态。"""
+    if os.path.exists(TEMPLATE_JSON):
+        try:
+            with open(TEMPLATE_JSON, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return {
+                "has_template": True,
+                "name": data.get("source", "自定义模板"),
+                "sections": len(data.get("sections", [])),
+            }
+        except Exception:
+            pass
+    return {"has_template": False, "name": "", "sections": 0}
+
+
+@app.route("/api/template/status")
+def template_status():
+    return jsonify({"success": True, **_get_template_status()})
+
+
+@app.route("/api/template/upload", methods=["POST"])
+def template_upload():
+    if "file" not in request.files:
+        return jsonify({"success": False, "message": "请选择要上传的 .docx 文件"})
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({"success": False, "message": "请选择要上传的文件"})
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        return jsonify({"success": False, "message": f"仅支持 {', '.join(ALLOWED_EXTENSIONS)} 格式"})
+
+    os.makedirs(TEMPLATE_DIR, exist_ok=True)
+    template_path = TEMPLATE_FILE + ext
+    file.save(template_path)
+
+    try:
+        from engine.template_parser import parse_any_template
+        structure = parse_any_template(template_path)
+        with open(TEMPLATE_JSON, "w", encoding="utf-8") as f:
+            json.dump(structure, f, ensure_ascii=False, indent=2)
+
+        # 同步到会话状态（清除旧模板标记）
+        return jsonify({
+            "success": True,
+            "message": f"模板「{structure['source']}」已导入（{len(structure['sections'])} 个节）",
+            "name": structure["source"],
+            "sections": len(structure["sections"]),
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": f"模板解析失败: {str(e)}"})
+
+
+@app.route("/api/template", methods=["DELETE"])
+def template_delete():
+    for path in [TEMPLATE_JSON]:
+        if os.path.exists(path):
+            os.remove(path)
+    # 清理上传的原始文件（任意扩展名）
+    for ext in ALLOWED_EXTENSIONS:
+        p = TEMPLATE_FILE + ext
+        if os.path.exists(p):
+            os.remove(p)
+    return jsonify({"success": True, "message": "已恢复默认模板"})
+
+
 @app.route("/api/history")
 def api_history():
     limit = request.args.get("limit", 10, type=int)
